@@ -188,7 +188,13 @@ public class AltLightBatch extends SpriteBatch{
             boolean lg = glow;
             glow = true;
             if((gc = AdvanceLighting.glowEquiv.get(region)) != null){
-                draw(gc, x, y, originX, originY, width, height, rotation);
+                float dw = (width / region.width) * gc.width;
+                float dh = (height / region.height) * gc.height;
+                
+                float dox = (dw - width) / 2f;
+                float doy = (dh - height) / 2f;
+
+                draw(gc, x - dox, y - doy, originX + dox, originY + doy, dw, dh, rotation);
             }
             glow = lg;
             glowTexture = false;

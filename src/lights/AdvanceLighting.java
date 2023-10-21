@@ -86,9 +86,14 @@ public class AdvanceLighting extends Mod{
 
             for(Weapon w : unit.weapons){
                 TextureRegion r2;
-                if((r2 = Core.atlas.find(w.name + "advance-light", Core.atlas.find("advance-lighting-" + w.name))).found()){
+                if(w.region.found() && (r2 = Core.atlas.find(w.name + "advance-light", Core.atlas.find("advance-lighting-" + w.name))).found()){
+                    //TODO double flipping bug
+                    /*
                     GlowPart g = new GlowPart(r2);
+                    g.mirror = w.flipSprite;
                     w.parts.insert(0, g);
+                    */
+                    glowEquiv.put(w.region, r2);
                 }
                 if(w.cellRegion.found()){
                     autoGlowRegions.add(w.cellRegion);
@@ -121,7 +126,7 @@ public class AdvanceLighting extends Mod{
         batch.setAuto(Layer.power - 0.0001f, true);
         batch.setAuto(Layer.power + 0.0001f, false);
 
-        batch.addUncapture(Layer.floor, Layer.turretHeat + 1f);
+        batch.addUncapture(Layer.floor, Layer.turret - 1f);
 
         batch.addUncapture(Layer.shields - 1f, Layer.shields + 1f);
         batch.addUncapture(Layer.buildBeam - 1f, Layer.buildBeam + 1f);
@@ -137,6 +142,13 @@ public class AdvanceLighting extends Mod{
         batch.end();
         //Lines.useLegacyLine = false;
         buffer.end();
+        Draw.flush();
+        Gl.blendEquationSeparate(Gl.max, Gl.max);
+        Blending.additive.apply();
+
         buffer.blit(screenShader);
+
+        Gl.blendEquationSeparate(Gl.funcAdd, Gl.funcAdd);
+        Blending.normal.apply();
     }
 }

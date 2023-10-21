@@ -8,6 +8,7 @@ import mindustry.entities.part.*;
 
 public class GlowPart extends DrawPart{
     TextureRegion region;
+    public boolean mirror = false;
 
     public GlowPart(TextureRegion region){
         this.region = region;
@@ -19,7 +20,10 @@ public class GlowPart extends DrawPart{
             AltLightBatch b = AdvanceLighting.batch;
             b.setGlow(true);
 
-            Draw.rect(region, params.x, params.y, params.rotation - 90f);
+            float w = region.width * Draw.scl * Draw.xscl * (mirror ? -1f : 1f);
+            float h = region.height * Draw.scl * Draw.yscl;
+
+            Draw.rect(region, params.x, params.y, w, h, params.rotation - 90f);
 
             b.setGlow(false);
         }
