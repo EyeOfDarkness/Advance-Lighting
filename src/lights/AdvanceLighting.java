@@ -3,6 +3,7 @@ package lights;
 import arc.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
+import arc.graphics.g2d.TextureAtlas.*;
 import arc.graphics.gl.*;
 import arc.struct.*;
 import arc.util.*;
@@ -52,17 +53,36 @@ public class AdvanceLighting extends Mod{
         Events.on(ContentInitEvent.class, e -> Core.app.post(() -> Core.app.post(this::load)));
     }
 
+    TextureRegion get(String name){
+        return Core.atlas.find(name + "-advance-light", Core.atlas.find("advance-lighting-" + name));
+    }
+
     void load(){
         for(UnitType unit : Vars.content.units()){
             if(unit.internal) continue;
             TextureRegion r;
-            if((r = Core.atlas.find(unit.name + "-advance-light", Core.atlas.find("advance-lighting-" + unit.name))).found()){
+            if((r = get(unit.name)).found()){
                 //GlowPart g = new GlowPart(r);
                 //Log.info(unit.name + "-advance-lighting");
                 //unit.parts.insert(0, g);
                 glowEquiv.put(unit.region, r);
             }
             if(unit.drawCell) autoGlowRegions.add(unit.cellRegion);
+
+            if(unit.sample instanceof Legsc){
+                TextureRegion rl1 = unit.legRegion, rl2 = unit.legBaseRegion;
+                //Just in case
+                if(rl1 instanceof AtlasRegion rla1){
+                    if((r = get(rla1.name)).found()){
+                        glowEquiv.put(rl1, r);
+                    }
+                }
+                if(rl2 instanceof AtlasRegion rla2){
+                    if((r = get(rla2.name)).found()){
+                        glowEquiv.put(rl2, r);
+                    }
+                }
+            }
 
             for(Weapon w : unit.weapons){
                 TextureRegion r2;
