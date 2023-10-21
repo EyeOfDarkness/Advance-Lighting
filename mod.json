@@ -1,0 +1,10 @@
+{
+    "name": "advance-lighting",
+    "displayName": "Advance lighting",
+    "author": "EoD",
+    "description": "Not recommended for weak computers. Only supports Vanilla/Supported-Json content. Currently only works for units.",
+    "version": "v1.0.0",
+    "minGameVersion": 145,
+    "main": "lights.AdvanceLighting",
+    "java": true
+}
