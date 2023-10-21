@@ -101,6 +101,7 @@ public class AltLightBatch extends SpriteBatch{
         rq.color = colorPacked;
         rq.mixColor = mixColorPacked;
         rq.z = z;
+        rq.blend = blending;
 
         if(!Mathf.zero(rotation)){
             float worldOriginX = x + originX;
@@ -230,6 +231,7 @@ public class AltLightBatch extends SpriteBatch{
         rq.color = colorPacked;
         rq.mixColor = mixColorPacked;
         rq.z = z;
+        rq.blend = blending;
         float[] vertices = rq.vertices;
 
         //System.arraycopy(spriteVertices, 0, rq.vertices, 0, 24);
@@ -268,6 +270,7 @@ public class AltLightBatch extends SpriteBatch{
             for(LightRequest r : requests){
                 if(r.texture != null){
                     if(auto) r.convertAutoColor();
+                    if(blending != r.blend) setBlending(r.blend);
                     superDraw(r.texture, r.vertices);
                 }else if(r.run != null){
                     r.run.run();
@@ -278,6 +281,9 @@ public class AltLightBatch extends SpriteBatch{
             }
             requests.size = size;
             super.flush();
+            if(blending != Blending.normal){
+                setBlending(Blending.normal);
+            }
 
             flushing = false;
         }else{
@@ -310,7 +316,12 @@ public class AltLightBatch extends SpriteBatch{
 
     @Override
     protected void setBlending(Blending blending){
-        glow = blending == Blending.additive;
+        if(flushing){
+            super.flush();
+        }else{
+            glow = blending == Blending.additive;
+        }
+        this.blending = blending;
     }
 
     LightRequest obtain(){
@@ -327,6 +338,7 @@ public class AltLightBatch extends SpriteBatch{
         r.run = null;
         r.action = 0;
         r.z = 0f;
+        r.blend = Blending.normal;
         calls++;
         return r;
     }

@@ -8,6 +8,7 @@ public class LightRequest implements Comparable<LightRequest>{
     boolean light;
     float color, mixColor;
     float[] vertices = new float[24];
+    Blending blend = Blending.normal;
     Texture texture;
     Runnable run;
     /**
