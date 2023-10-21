@@ -22,6 +22,7 @@ public class AltLightBatch extends SpriteBatch{
     Batch lastBatch;
 
     final static int maxRequests = 2048;
+    final static float[] tmpVert = new float[24];
 
     public AltLightBatch(){
         super(maxRequests, createShaderL());
@@ -248,6 +249,33 @@ public class AltLightBatch extends SpriteBatch{
         float color = glow ? colorPacked : Color.blackFloatBits;
         for(int i = 2; i < 24; i += 6){
             vertices[i] = color;
+        }
+
+        if(!glowTexture){
+            TextureRegion r;
+            float su = spriteVertices[3], sv = spriteVertices[4];
+            if((r = AdvanceLighting.uvGlowRegions.get(UVStruct.uv(texture, su, sv))) != null){
+                boolean lg = glow;
+                glowTexture = true;
+                glow = true;
+
+                System.arraycopy(spriteVertices, 0, tmpVert, 0, 24);
+                float u = r.u, v = r.v, u2 = r.u2, v2 = r.v2;
+
+                tmpVert[3] = u;
+                tmpVert[4] = v;
+                tmpVert[9] = u;
+                tmpVert[10] = v2;
+                tmpVert[15] = u2;
+                tmpVert[16] = v2;
+                tmpVert[21] = u2;
+                tmpVert[22] = v;
+
+                draw(r.texture, tmpVert, 0, 24);
+
+                glow = lg;
+                glowTexture = false;
+            }
         }
     }
 

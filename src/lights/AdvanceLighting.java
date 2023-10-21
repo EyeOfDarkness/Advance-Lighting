@@ -21,6 +21,7 @@ public class AdvanceLighting extends Mod{
     public static AltLightBatch batch;
     public static ObjectMap<TextureRegion, TextureRegion> glowEquiv = new ObjectMap<>();
     public static ObjectSet<TextureRegion> autoGlowRegions = new ObjectSet<>();
+    public static IntMap<TextureRegion> uvGlowRegions = new IntMap<>();
     static FrameBuffer buffer;
     static Shader screenShader;
 
@@ -59,6 +60,12 @@ public class AdvanceLighting extends Mod{
     }
 
     void load(){
+        /*
+        for(Texture tex : Core.atlas.getTextures()){
+            Log.info(tex.getTextureObjectHandle());
+        }
+        */
+
         for(UnitType unit : Vars.content.units()){
             if(unit.internal) continue;
             TextureRegion r;
@@ -75,15 +82,18 @@ public class AdvanceLighting extends Mod{
                 //Just in case
                 if(rl1 instanceof AtlasRegion rla1){
                     if((r = get(rla1.name)).found()){
-                        glowEquiv.put(rl1, r);
+                        //glowEquiv.put(rl1, r);
+                        uvGlowRegions.put(UVStruct.uv(rl1.texture, rl1.u, rl1.v), r);
                     }
                 }
                 if(rl2 instanceof AtlasRegion rla2){
                     if((r = get(rla2.name)).found()){
-                        glowEquiv.put(rl2, r);
+                        //glowEquiv.put(rl2, r);
+                        uvGlowRegions.put(UVStruct.uv(rl2.texture, rl2.u, rl2.v), r);
                     }
                 }
             }
+
             if(unit.sample instanceof Crawlc){
                 TextureRegion[] seg = unit.segmentRegions;
                 for(TextureRegion sr : seg){
@@ -106,7 +116,7 @@ public class AdvanceLighting extends Mod{
                         }
                     }
                 }
-                if(w.region.found() && (r2 = Core.atlas.find(w.name + "advance-light", Core.atlas.find("advance-lighting-" + w.name))).found()){
+                if(w.region.found() && (r2 = get(w.name)).found()){
                     //TODO double flipping bug
                     /*
                     GlowPart g = new GlowPart(r2);
