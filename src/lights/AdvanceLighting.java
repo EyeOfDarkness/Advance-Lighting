@@ -10,6 +10,7 @@ import arc.util.*;
 import lights.graphics.*;
 import lights.parts.*;
 import mindustry.*;
+import mindustry.entities.part.*;
 import mindustry.game.EventType.*;
 import mindustry.gen.*;
 import mindustry.graphics.*;
@@ -83,9 +84,28 @@ public class AdvanceLighting extends Mod{
                     }
                 }
             }
+            if(unit.sample instanceof Crawlc){
+                TextureRegion[] seg = unit.segmentRegions;
+                for(TextureRegion sr : seg){
+                    if(sr instanceof AtlasRegion sar && (r = get(sar.name)).found()){
+                        glowEquiv.put(sr, r);
+                    }
+                }
+            }
 
             for(Weapon w : unit.weapons){
                 TextureRegion r2;
+                if(!w.parts.isEmpty()){
+                    for(DrawPart part : w.parts){
+                        if(part instanceof RegionPart p){
+                            for(TextureRegion region : p.regions){
+                                if(region instanceof AtlasRegion ar && (r2 = get(ar.name)).found()){
+                                    glowEquiv.put(region, r2);
+                                }
+                            }
+                        }
+                    }
+                }
                 if(w.region.found() && (r2 = Core.atlas.find(w.name + "advance-light", Core.atlas.find("advance-lighting-" + w.name))).found()){
                     //TODO double flipping bug
                     /*

@@ -6,7 +6,6 @@ import arc.graphics.g2d.*;
 import arc.graphics.gl.*;
 import arc.math.*;
 import arc.struct.*;
-import arc.util.*;
 import lights.*;
 
 public class AltLightBatch extends SpriteBatch{
@@ -18,6 +17,7 @@ public class AltLightBatch extends SpriteBatch{
 
     boolean glow = false;
     boolean glowTexture = false;
+    float glowAlpha = 1f;
 
     Batch lastBatch;
 
@@ -77,9 +77,19 @@ public class AltLightBatch extends SpriteBatch{
         return false;
     }
 
+    void updateGlowAlpha(){
+        Color c = color;
+
+        float lum = Mathf.curve((c.r + c.g + c.b) / 3f, 0.2f, 0.6f);
+        float sat = Mathf.curve(Math.max(c.r, Math.max(c.g, c.b)) - Math.min(c.r, Math.min(c.g, c.b)), 0.1f, 0.3f);
+        float v = Mathf.clamp(sat + lum);
+
+        glowAlpha = Mathf.curve(c.a, 0.7f * (1f - v), 1f);
+    }
+
     @Override
     protected void draw(TextureRegion region, float x, float y, float originX, float originY, float width, float height, float rotation){
-        if(flushing || calls >= maxRequests || invalid() || color.a < 0.7f) return;
+        if(flushing || calls >= maxRequests || invalid() || glowAlpha <= 0f) return;
 
         LightRequest rq = obtain();
         float[] vertices = rq.vertices;
@@ -201,8 +211,8 @@ public class AltLightBatch extends SpriteBatch{
         }
     }
     
-    void superDraw(Texture texture, float[] spriteVertices, int offset, int count){
-        super.draw(texture, spriteVertices, offset, count);
+    void superDraw(Texture texture, float[] spriteVertices){
+        super.draw(texture, spriteVertices, 0, 24);
     }
 
     @Override
@@ -213,7 +223,7 @@ public class AltLightBatch extends SpriteBatch{
             return;
         }
         */
-        if(flushing || calls >= maxRequests || invalid() || color.a < 0.7f) return;
+        if(flushing || calls >= maxRequests || invalid() || glowAlpha <= 0f) return;
 
         LightRequest rq = obtain();
         rq.texture = texture;
@@ -258,7 +268,7 @@ public class AltLightBatch extends SpriteBatch{
             for(LightRequest r : requests){
                 if(r.texture != null){
                     if(auto) r.convertAutoColor();
-                    superDraw(r.texture, r.vertices, 0, 24);
+                    superDraw(r.texture, r.vertices);
                 }else if(r.run != null){
                     r.run.run();
                 }else{
@@ -278,6 +288,24 @@ public class AltLightBatch extends SpriteBatch{
     @Override
     protected void setShader(Shader shader, boolean apply){
         //
+    }
+
+    @Override
+    protected void setColor(Color tint){
+        super.setColor(tint);
+        updateGlowAlpha();
+    }
+
+    @Override
+    protected void setColor(float r, float g, float b, float a){
+        super.setColor(r, g, b, a);
+        updateGlowAlpha();
+    }
+
+    @Override
+    protected void setPackedColor(float packedColor){
+        super.setPackedColor(packedColor);
+        updateGlowAlpha();
     }
 
     @Override
@@ -327,11 +355,29 @@ public class AltLightBatch extends SpriteBatch{
                 varying lowp vec4 v_mix_color;
                 varying vec2 v_texCoords;
                 uniform sampler2D u_texture;
-                                
+                
+                float curve(float f, float from, float to){
+                    if(f < from){
+                        return 0.0;
+                    }else if(f > to){
+                        return 1.0;
+                    }
+                    return (f - from) / (to - from);
+                }
+                float clamp(float value){
+                    return max(min(value, 1.0), 0.0);
+                }
+                
                 void main(){
                     vec4 c = texture2D(u_texture, v_texCoords);
-                
-                    float alpha = ((c.a * v_color.a) - 0.7) / (1.0 - 0.7);
+                    
+                    float lum = curve((c.r + c.g + c.b) / 3.0, 0.2, 0.6);
+                    float sat = curve(max(c.r, max(c.g, c.g)) - min(c.r, min(c.g, c.b)), 0.1, 0.3);
+                    float v = clamp(sat + lum);
+                    
+                    float ca = c.a * v_color.a;
+                    
+                    float alpha = curve(ca, 0.7 * (1.0 - v), 1.0);
                     gl_FragColor = vec4(mix(c.rgb, v_mix_color.rgb, v_mix_color.a) * v_color.rgb, alpha);
                 }
                 """);
