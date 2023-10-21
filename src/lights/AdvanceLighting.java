@@ -118,11 +118,21 @@ public class AdvanceLighting extends Mod{
         batch.setGlow(false);
         batch.setAuto(Layer.bullet - 0.02f, true);
         batch.setAuto(Layer.effect + 0.02f, false);
+        batch.setAuto(Layer.power - 0.0001f, true);
+        batch.setAuto(Layer.power + 0.0001f, false);
+
+        batch.addUncapture(Layer.floor, Layer.turretHeat + 1f);
 
         batch.addUncapture(Layer.shields - 1f, Layer.shields + 1f);
         batch.addUncapture(Layer.buildBeam - 1f, Layer.buildBeam + 1f);
 
+        boolean light = Vars.state.rules.lighting;
+        Vars.state.rules.lighting = false;
+
+        Vars.renderer.blocks.drawBlocks();
         Groups.draw.draw(Drawc::draw);
+
+        Vars.state.rules.lighting = light;
 
         batch.end();
         //Lines.useLegacyLine = false;
