@@ -27,6 +27,8 @@ public class AdvanceLighting extends Mod{
     public static boolean bloomActive;
     static FrameBuffer buffer;
 
+    static int bloomQuality = 4;
+
     public AdvanceLighting(){
         if(Vars.headless) return;
         Events.run(Trigger.drawOver, () -> Draw.draw(Layer.light + 5f, this::draw));
@@ -55,12 +57,54 @@ public class AdvanceLighting extends Mod{
                     }
                     """);
         }));
-        Events.on(ContentInitEvent.class, e -> Core.app.post(() -> Core.app.post(this::load)));
+        //Events.on(ContentInitEvent.class, e -> Core.app.post(() -> Core.app.post(this::load)));
+        Events.on(ClientLoadEvent.class, e -> {
+            loadSettings();
+            Core.app.post(this::load);
+        });
+    }
+
+    void loadSettings(){
+        bloomQuality = Core.settings.getInt("al-bloom-quality", 4);
+        setBloom(Core.settings.getBool("al-bloom-enabled", false));
+
+        Vars.ui.settings.addCategory("advance-lighting", st -> {
+            st.checkPref("al-bloom-enabled", false, this::setBloom);
+            st.sliderPref("al-bloom-quality", 4, 1, 6, s -> {
+                bloomQuality = s;
+                if(s > 1){
+                    return "1/" + s;
+                }
+                return "1";
+            });
+            st.sliderPref("al-bloom-intensity", 75, 0, 100, s -> {
+                if(bloom != null){
+                    bloom.intensity = s / 100f;
+                }
+                return s + "%";
+            });
+            st.sliderPref("al-bloom-blur-amount", 2, 0, 25, s -> {
+                if(bloom != null){
+                    bloom.blurPasses = s;
+                }
+                return s + "";
+            });
+            st.sliderPref("al-bloom-flare-amount", 3, 0, 25, s -> {
+                if(bloom != null){
+                    bloom.flarePasses = s;
+                }
+                return s + "";
+            });
+        });
     }
 
     public void setBloom(boolean on){
         if(on && bloom == null){
-            bloom = new AdditiveBloom(Core.graphics.getWidth(), Core.graphics.getHeight(), 4);
+            bloom = new AdditiveBloom(Core.graphics.getWidth(), Core.graphics.getHeight(), bloomQuality);
+
+            bloom.blurPasses = Core.settings.getInt("al-bloom-blur-amount", 2);
+            bloom.flarePasses = Core.settings.getInt("al-bloom-flare-amount", 3);
+            bloom.intensity = Core.settings.getInt("al-bloom-intensity", 75) / 100f;
         }
         bloomActive = on;
     }
@@ -192,7 +236,7 @@ public class AdvanceLighting extends Mod{
         Blending.normal.apply();
 
         if(bloomActive && bloom != null){
-            bloom.resize(Core.graphics.getWidth(), Core.graphics.getHeight(), 4);
+            bloom.resize(Core.graphics.getWidth(), Core.graphics.getHeight(), bloomQuality);
             bloom.render(buffer.getTexture());
         }
     }

@@ -9,8 +9,11 @@ import lights.*;
 
 public class AdditiveBloom{
     public int blurPasses = 2, flarePasses = 3;
+    public float intensity = 0.75f;
     private FrameBuffer pingPong1, pingPong2, pingPong3;
     private Shader blurShader, renderShader;
+
+    private float lastIntens = 0.75f;
 
     public AdditiveBloom(int width, int height, int scale){
         init(width / scale, height / scale);
@@ -41,6 +44,11 @@ public class AdditiveBloom{
 
     public void render(Texture texture){
         Gl.disable(Gl.blend);
+
+        if(intensity != lastIntens){
+            setIntensity(intensity);
+            lastIntens = intensity;
+        }
 
         pingPong1.begin(Color.black);
         //Draw.blit(texture, AdvanceLighting.screenShader);
