@@ -410,9 +410,11 @@ public class AltLightBatch extends SpriteBatch{
                 
                 void main(){
                     vec4 c = texture2D(u_texture, v_texCoords);
+                    //vec4 fc = c * v_color;
+                    vec3 fc = mix(c.rgb, v_mix_color.rgb, v_mix_color.a) * v_color.rgb;
                     
-                    float lum = curve((c.r + c.g + c.b) / 3.0, 0.2, 0.6);
-                    float sat = curve(max(c.r, max(c.g, c.g)) - min(c.r, min(c.g, c.b)), 0.1, 0.3);
+                    float lum = curve((fc.r + fc.g + fc.b) / 3.0, 0.2, 0.6);
+                    float sat = curve(max(fc.r, max(fc.g, fc.g)) - min(fc.r, min(fc.g, fc.b)), 0.1, 0.3);
                     float v = clamp(sat + lum);
                     
                     float ca = c.a * v_color.a;

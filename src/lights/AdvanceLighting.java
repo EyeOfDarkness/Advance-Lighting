@@ -22,8 +22,10 @@ public class AdvanceLighting extends Mod{
     public static ObjectMap<TextureRegion, TextureRegion> glowEquiv = new ObjectMap<>();
     public static ObjectSet<TextureRegion> autoGlowRegions = new ObjectSet<>();
     public static IntMap<TextureRegion> uvGlowRegions = new IntMap<>();
+    public static Shader screenShader;
+    public static AdditiveBloom bloom;
+    public static boolean bloomActive;
     static FrameBuffer buffer;
-    static Shader screenShader;
 
     public AdvanceLighting(){
         if(Vars.headless) return;
@@ -31,6 +33,7 @@ public class AdvanceLighting extends Mod{
         Events.on(FileTreeInitEvent.class, e -> Core.app.post(() -> {
             batch = new AltLightBatch();
             buffer = new FrameBuffer();
+            setBloom(true);
 
             screenShader = new Shader("""
                     attribute vec4 a_position;
@@ -53,6 +56,13 @@ public class AdvanceLighting extends Mod{
                     """);
         }));
         Events.on(ContentInitEvent.class, e -> Core.app.post(() -> Core.app.post(this::load)));
+    }
+
+    public void setBloom(boolean on){
+        if(on && bloom == null){
+            bloom = new AdditiveBloom(Core.graphics.getWidth(), Core.graphics.getHeight(), 4);
+        }
+        bloomActive = on;
     }
 
     TextureRegion get(String name){
@@ -180,5 +190,10 @@ public class AdvanceLighting extends Mod{
 
         Gl.blendEquationSeparate(Gl.funcAdd, Gl.funcAdd);
         Blending.normal.apply();
+
+        if(bloomActive && bloom != null){
+            bloom.resize(Core.graphics.getWidth(), Core.graphics.getHeight(), 4);
+            bloom.render(buffer.getTexture());
+        }
     }
 }
