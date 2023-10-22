@@ -9,7 +9,7 @@ import lights.*;
 
 public class AdditiveBloom{
     public int blurPasses = 2, flarePasses = 3;
-    public float intensity = 0.75f;
+    public float intensity = 0.75f, flareLength = 3f;
     private FrameBuffer pingPong1, pingPong2, pingPong3;
     private Shader blurShader, renderShader;
 
@@ -77,13 +77,13 @@ public class AdditiveBloom{
             for(int i = 0; i < flarePasses; i++){
                 pingPong2.begin();
                 blurShader.bind();
-                blurShader.setUniformf("dir", 3f, 0f);
+                blurShader.setUniformf("dir", flareLength, 0f);
                 pingPong3.blit(blurShader);
                 pingPong2.end();
 
                 pingPong3.begin();
                 blurShader.bind();
-                blurShader.setUniformf("dir", 3f, 0f);
+                blurShader.setUniformf("dir", flareLength, 0f);
                 pingPong2.blit(blurShader);
                 pingPong3.end();
             }
