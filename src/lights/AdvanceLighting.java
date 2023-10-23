@@ -6,7 +6,6 @@ import arc.graphics.g2d.*;
 import arc.graphics.g2d.TextureAtlas.*;
 import arc.graphics.gl.*;
 import arc.struct.*;
-import arc.util.*;
 import lights.graphics.*;
 import lights.parts.*;
 import mindustry.*;
@@ -16,12 +15,14 @@ import mindustry.gen.*;
 import mindustry.graphics.*;
 import mindustry.mod.*;
 import mindustry.type.*;
+import mindustry.type.weapons.*;
 
 public class AdvanceLighting extends Mod{
     public static AltLightBatch batch;
     public static ObjectMap<TextureRegion, TextureRegion> glowEquiv = new ObjectMap<>();
     public static ObjectSet<TextureRegion> autoGlowRegions = new ObjectSet<>();
     public static IntMap<TextureRegion> uvGlowRegions = new IntMap<>();
+    public static IntSet uvAutoGlowRegions = new IntSet();
     public static Shader screenShader;
     public static AdditiveBloom bloom;
     public static boolean bloomActive;
@@ -188,6 +189,13 @@ public class AdvanceLighting extends Mod{
                 }
                 if(w.cellRegion.found()){
                     autoGlowRegions.add(w.cellRegion);
+                }
+                if(w instanceof RepairBeamWeapon rw){
+                    autoGlowRegions.add(rw.laserEnd);
+                    uvAutoGlowRegions.add(UVStruct.uv(rw.laser.texture, rw.laser.u, rw.laser.v));
+
+                    autoGlowRegions.add(rw.laserTopEnd);
+                    uvAutoGlowRegions.add(UVStruct.uv(rw.laserTop.texture, rw.laserTop.u, rw.laserTop.v));
                 }
             }
 

@@ -246,7 +246,7 @@ public class AltLightBatch extends SpriteBatch{
             }
         }
          */
-        float color = glow ? colorPacked : Color.blackFloatBits;
+        float color = (glow || AdvanceLighting.uvAutoGlowRegions.contains(UVStruct.uv(texture, vertices[3], vertices[4]))) ? colorPacked : Color.blackFloatBits;
         for(int i = 2; i < 24; i += 6){
             vertices[i] = color;
         }
