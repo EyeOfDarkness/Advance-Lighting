@@ -147,6 +147,7 @@ public class AdditiveBloom{
                 
                 void main(){
                     vec4 v = texture2D(u_texture, v_texCoords);
+                    vec3 tvc = mix(vec3(0.0, 0.0, 0.0), v.rgb, v.a);
                     
                     //float asat = sat * 0.25 + 1.0;
                     
@@ -164,13 +165,22 @@ public class AdditiveBloom{
                     //v.g = pow(v.g, pow(power, 1f - (v.g - mn) * 0.5));
                     //v.b = pow(v.b, pow(power, 1f - (v.b - mn) * 0.5));
                     
-                    v.r = pow(v.r, 1.5 / (1.0 + (v.r - mn) * power));
-                    v.g = pow(v.g, 1.5 / (1.0 + (v.g - mn) * power));
-                    v.b = pow(v.b, 1.5 / (1.0 + (v.b - mn) * power));
+                    tvc.r = pow(tvc.r, 1.5 / (1.0 + (tvc.r - mn) * power));
+                    tvc.g = pow(tvc.g, 1.5 / (1.0 + (tvc.g - mn) * power));
+                    tvc.b = pow(tvc.b, 1.5 / (1.0 + (tvc.b - mn) * power));
                     
-                    v.a = v.a * u_intensity;
+                    float ta = 1.0 - pow(1.0 - u_intensity, 2.0);
+                    float ip = max(u_intensity, 0.05);
                     
-                    gl_FragColor = v;
+                    //v.a = v.a * ta;
+                    if(u_intensity < 1.0){
+                        tvc.r = pow(tvc.r, 1.0 / ip) * ta;
+                        tvc.g = pow(tvc.g, 1.0 / ip) * ta;
+                        tvc.b = pow(tvc.b, 1.0 / ip) * ta;
+                    }
+                    
+                    //gl_FragColor = v;
+                    gl_FragColor = vec4(tvc, 1.0);
                 }
                 """);
     }
