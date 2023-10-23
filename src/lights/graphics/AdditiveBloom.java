@@ -1,15 +1,19 @@
 package lights.graphics;
 
 import arc.*;
+import arc.files.*;
 import arc.graphics.*;
 import arc.graphics.Pixmap.*;
 import arc.graphics.g2d.*;
 import arc.graphics.gl.*;
+import arc.math.*;
 import lights.*;
+import mindustry.*;
 
 public class AdditiveBloom{
     public int blurPasses = 2, flarePasses = 3;
     public float intensity = 0.75f, flareLength = 3f;
+    public float blurFeedBack = 1f, flareFeedBack = 1f;
     private FrameBuffer pingPong1, pingPong2, pingPong3;
     private Shader blurShader, renderShader;
 
@@ -56,14 +60,18 @@ public class AdditiveBloom{
         pingPong1.end();
 
         for(int i = 0; i < blurPasses; i++){
+            float f = blurPasses > 1 ? Mathf.lerp(blurFeedBack, 1f, i / (blurPasses - 1f)) : 1f;
+
             pingPong2.begin();
             blurShader.bind();
+            blurShader.setUniformf("u_feedBack", f);
             blurShader.setUniformf("dir", 1f, 0f);
             pingPong1.blit(blurShader);
             pingPong2.end();
 
             pingPong1.begin();
             blurShader.bind();
+            blurShader.setUniformf("u_feedBack", f);
             blurShader.setUniformf("dir", 0f, 1f);
             pingPong2.blit(blurShader);
             pingPong1.end();
@@ -75,14 +83,18 @@ public class AdditiveBloom{
             pingPong3.end();
 
             for(int i = 0; i < flarePasses; i++){
+                float f = flarePasses > 1 ? Mathf.lerp(flareFeedBack, 1f, i / (flarePasses - 1f)) : 1f;
+
                 pingPong2.begin();
                 blurShader.bind();
+                blurShader.setUniformf("u_feedBack", f);
                 blurShader.setUniformf("dir", flareLength, 0f);
                 pingPong3.blit(blurShader);
                 pingPong2.end();
 
                 pingPong3.begin();
                 blurShader.bind();
+                blurShader.setUniformf("u_feedBack", f);
                 blurShader.setUniformf("dir", flareLength, 0f);
                 pingPong2.blit(blurShader);
                 pingPong3.end();
@@ -106,6 +118,12 @@ public class AdditiveBloom{
     public void setIntensity(float v){
         renderShader.bind();
         renderShader.setUniformf("u_intensity", v);
+    }
+    public void setBlurFeedBack(float v){
+        blurFeedBack = v;
+    }
+    public void setFlareFeedBack(float v){
+        flareFeedBack = v;
     }
 
     private static Shader createRenderShader(){
@@ -157,7 +175,12 @@ public class AdditiveBloom{
                 """);
     }
 
+    private static Fi local(String name){
+        return Vars.tree.get("shaders/" + name);
+    }
+
     private static Shader createBlurShader(){
-        return new Shader(Core.files.internal("bloomshaders/blurspace.vert"), Core.files.internal("bloomshaders/alpha_gaussian.frag"));
+        //return new Shader(Core.files.internal("bloomshaders/blurspace.vert"), Core.files.internal("bloomshaders/alpha_gaussian.frag"));
+        return new Shader(Core.files.internal("bloomshaders/blurspace.vert"), Vars.tree.get("shaders/feedbackblur.frag"));
     }
 }

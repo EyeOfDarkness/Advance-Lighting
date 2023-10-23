@@ -18,11 +18,14 @@ public class AltLightBatch extends SpriteBatch{
     boolean glow = false;
     boolean glowTexture = false;
     float glowAlpha = 1f;
+    Color blackAlpha = new Color();
+    float blackAlphaBits = Color.blackFloatBits;
 
     Batch lastBatch;
 
     final static int maxRequests = 2048;
     final static float[] tmpVert = new float[24];
+    final static Color tmpColor = new Color();
 
     public AltLightBatch(){
         super(maxRequests, createShaderL());
@@ -95,7 +98,7 @@ public class AltLightBatch extends SpriteBatch{
         LightRequest rq = obtain();
         float[] vertices = rq.vertices;
 
-        float color = (glow || AdvanceLighting.autoGlowRegions.contains(region)) ? this.colorPacked : Color.blackFloatBits;
+        float color = (glow || AdvanceLighting.autoGlowRegions.contains(region)) ? this.colorPacked : blackAlphaBits;
         float mixColor = this.mixColorPacked;
 
         rq.texture = region.texture;
@@ -246,7 +249,7 @@ public class AltLightBatch extends SpriteBatch{
             }
         }
          */
-        float color = (glow || AdvanceLighting.uvAutoGlowRegions.contains(UVStruct.uv(texture, vertices[3], vertices[4]))) ? colorPacked : Color.blackFloatBits;
+        float color = (glow || AdvanceLighting.uvAutoGlowRegions.contains(UVStruct.uv(texture, vertices[3], vertices[4]))) ? colorPacked : blackAlphaBits;
         for(int i = 2; i < 24; i += 6){
             vertices[i] = color;
         }
@@ -327,18 +330,29 @@ public class AltLightBatch extends SpriteBatch{
     @Override
     protected void setColor(Color tint){
         super.setColor(tint);
+
+        blackAlpha.set(0f, 0f, 0f, tint.a);
+        blackAlphaBits = blackAlpha.toFloatBits();
+
         updateGlowAlpha();
     }
 
     @Override
     protected void setColor(float r, float g, float b, float a){
         super.setColor(r, g, b, a);
+        blackAlpha.set(0f, 0f, 0f, a);
+        blackAlphaBits = blackAlpha.toFloatBits();
+
         updateGlowAlpha();
     }
 
     @Override
     protected void setPackedColor(float packedColor){
         super.setPackedColor(packedColor);
+        blackAlpha.abgr8888(packedColor);
+        blackAlpha.set(0f, 0f, 0f);
+        blackAlphaBits = blackAlpha.toFloatBits();
+
         updateGlowAlpha();
     }
 

@@ -102,6 +102,18 @@ public class AdvanceLighting extends Mod{
                 }
                 return (s / 10f) + "";
             });
+            st.sliderPref("al-bloom-blur-feedback", 100, 100, 200, s -> {
+                if(bloom != null){
+                    bloom.setBlurFeedBack(s / 100f);
+                }
+                return (s / 100f) + "";
+            });
+            st.sliderPref("al-bloom-flare-feedback", 100, 100, 200, s -> {
+                if(bloom != null){
+                    bloom.setFlareFeedBack(s / 100f);
+                }
+                return (s / 100f) + "";
+            });
         });
     }
 
@@ -113,6 +125,9 @@ public class AdvanceLighting extends Mod{
             bloom.flarePasses = Core.settings.getInt("al-bloom-flare-amount", 3);
             bloom.intensity = Core.settings.getInt("al-bloom-intensity", 75) / 100f;
             bloom.flareLength = Core.settings.getInt("al-bloom-flare-length", 30) / 10f;
+
+            bloom.setBlurFeedBack(Core.settings.getInt("al-bloom-blur-feedback", 100) / 100f);
+            bloom.setFlareFeedBack(Core.settings.getInt("al-bloom-flare-feedback", 100) / 100f);
         }
         bloomActive = on;
     }
