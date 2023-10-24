@@ -16,6 +16,9 @@ import mindustry.graphics.*;
 import mindustry.mod.*;
 import mindustry.type.*;
 import mindustry.type.weapons.*;
+import mindustry.world.*;
+import mindustry.world.blocks.defense.turrets.*;
+import mindustry.world.draw.*;
 
 public class AdvanceLighting extends Mod{
     public static AltLightBatch batch;
@@ -69,7 +72,7 @@ public class AdvanceLighting extends Mod{
         bloomQuality = Core.settings.getInt("al-bloom-quality", 4);
         setBloom(Core.settings.getBool("al-bloom-enabled", false));
 
-        Vars.ui.settings.addCategory("advance-lighting", st -> {
+        Vars.ui.settings.addCategory("advance-lighting", "advance-lighting-setting-icon", st -> {
             st.checkPref("al-bloom-enabled", false, this::setBloom);
             st.sliderPref("al-bloom-quality", 4, 1, 6, s -> {
                 bloomQuality = s;
@@ -136,12 +139,53 @@ public class AdvanceLighting extends Mod{
         return Core.atlas.find(name + "-advance-light", Core.atlas.find("advance-lighting-" + name));
     }
 
+    void recursiveLoad(Seq<DrawPart> parts, String name){
+        TextureRegion r;
+        for(DrawPart part : parts){
+            if(part instanceof RegionPart rp){
+                String realName = rp.name == null ? name + rp.suffix : rp.name;
+                if(rp.drawRegion && (r = get(realName)).found()){
+                    for(TextureRegion r2 : rp.regions){
+                        glowEquiv.put(r2, r);
+                    }
+                }
+                if(!rp.children.isEmpty()){
+                    recursiveLoad(rp.children, name);
+                }
+            }
+        }
+    }
+
     void load(){
         /*
         for(Texture tex : Core.atlas.getTextures()){
             Log.info(tex.getTextureObjectHandle());
         }
         */
+        for(Block block : Vars.content.blocks()){
+            if(!block.update) continue;
+
+            if(block instanceof Turret tr && tr.drawer instanceof DrawTurret dtr){
+                TextureRegion r;
+                if(block.region.found() && (r = get(block.name)).found()){
+                    glowEquiv.put(block.region, r);
+                }
+
+                /*
+                for(DrawPart part : dtr.parts){
+                    if(part instanceof RegionPart rp){
+                        String realName = rp.name == null ? block.name + rp.suffix : rp.name;
+                        if(rp.drawRegion && (r = get(realName)).found()){
+                            for(TextureRegion r2 : rp.regions){
+                                glowEquiv.put(r2, r);
+                            }
+                        }
+                    }
+                }
+                 */
+                recursiveLoad(dtr.parts, block.name);
+            }
+        }
 
         for(UnitType unit : Vars.content.units()){
             if(unit.internal) continue;
@@ -180,9 +224,13 @@ public class AdvanceLighting extends Mod{
                 }
             }
 
+            if(!unit.parts.isEmpty()){
+                recursiveLoad(unit.parts, unit.name);
+            }
             for(Weapon w : unit.weapons){
                 TextureRegion r2;
                 if(!w.parts.isEmpty()){
+                    /*
                     for(DrawPart part : w.parts){
                         if(part instanceof RegionPart p){
                             for(TextureRegion region : p.regions){
@@ -192,6 +240,8 @@ public class AdvanceLighting extends Mod{
                             }
                         }
                     }
+                     */
+                    recursiveLoad(w.parts, w.name);
                 }
                 if(w.region.found() && (r2 = get(w.name)).found()){
                     //TODO double flipping bug
