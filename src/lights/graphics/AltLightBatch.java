@@ -17,6 +17,7 @@ public class AltLightBatch extends SpriteBatch{
 
     boolean glow = false;
     boolean glowTexture = false;
+    boolean excludeMode = false;
     float glowAlpha = 1f;
     Color blackAlpha = new Color();
     float blackAlphaBits = Color.blackFloatBits;
@@ -33,6 +34,10 @@ public class AltLightBatch extends SpriteBatch{
         for(int i = 0; i < maxRequests; i++){
             requests.add(new LightRequest());
         }
+    }
+
+    public void setExclude(boolean ex){
+        excludeMode = ex;
     }
 
     public void setGlow(boolean glow){
@@ -93,7 +98,7 @@ public class AltLightBatch extends SpriteBatch{
 
     @Override
     protected void draw(TextureRegion region, float x, float y, float originX, float originY, float width, float height, float rotation){
-        if(flushing || calls >= maxRequests || invalid() || glowAlpha <= 0f) return;
+        if(flushing || calls >= maxRequests || invalid() || (excludeMode && AdvanceLighting.exludeRegions.contains(region)) || glowAlpha <= 0f) return;
 
         LightRequest rq = obtain();
         float[] vertices = rq.vertices;

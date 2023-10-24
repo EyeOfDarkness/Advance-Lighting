@@ -6,10 +6,13 @@ import arc.graphics.g2d.*;
 import arc.graphics.g2d.TextureAtlas.*;
 import arc.graphics.gl.*;
 import arc.struct.*;
+import arc.util.*;
 import lights.graphics.*;
 import lights.parts.*;
 import mindustry.*;
+import mindustry.content.*;
 import mindustry.entities.part.*;
+import mindustry.game.*;
 import mindustry.game.EventType.*;
 import mindustry.gen.*;
 import mindustry.graphics.*;
@@ -18,18 +21,26 @@ import mindustry.type.*;
 import mindustry.type.weapons.*;
 import mindustry.world.*;
 import mindustry.world.blocks.defense.turrets.*;
+import mindustry.world.blocks.environment.*;
+import mindustry.world.blocks.heat.*;
+import mindustry.world.blocks.power.*;
+import mindustry.world.blocks.production.*;
 import mindustry.world.draw.*;
+
+import java.lang.reflect.*;
 
 public class AdvanceLighting extends Mod{
     public static AltLightBatch batch;
     public static ObjectMap<TextureRegion, TextureRegion> glowEquiv = new ObjectMap<>();
-    public static ObjectSet<TextureRegion> autoGlowRegions = new ObjectSet<>();
+    public static ObjectSet<TextureRegion> autoGlowRegions = new ObjectSet<>(), exludeRegions = new ObjectSet<>();
     public static IntMap<TextureRegion> uvGlowRegions = new IntMap<>();
-    public static IntSet uvAutoGlowRegions = new IntSet();
+    public static IntSet uvAutoGlowRegions = new IntSet(), validBlocks = new IntSet();
     public static Shader screenShader;
     public static AdditiveBloom bloom;
     public static boolean bloomActive;
     static FrameBuffer buffer;
+
+    static Seq<Tile> tileView;
 
     static int bloomQuality = 4;
 
@@ -64,8 +75,25 @@ public class AdvanceLighting extends Mod{
         //Events.on(ContentInitEvent.class, e -> Core.app.post(() -> Core.app.post(this::load)));
         Events.on(ClientLoadEvent.class, e -> {
             loadSettings();
-            Core.app.post(this::load);
+            Core.app.post(() -> {
+                load();
+                loadTileView();
+            });
         });
+    }
+
+    @SuppressWarnings("unchecked")
+    void loadTileView(){
+        try{
+            Field f = BlockRenderer.class.getDeclaredField("tileview");
+            f.setAccessible(true);
+
+            tileView = (Seq<Tile>)f.get(Vars.renderer.blocks);
+            Log.info(tileView);
+        }catch(Exception ex){
+            tileView = null;
+            Log.err(ex);
+        }
     }
 
     void loadSettings(){
@@ -139,21 +167,84 @@ public class AdvanceLighting extends Mod{
         return Core.atlas.find(name + "-advance-light", Core.atlas.find("advance-lighting-" + name));
     }
 
-    void recursiveLoad(Seq<DrawPart> parts, String name){
+    boolean recursiveLoad(Seq<DrawPart> parts, String name){
         TextureRegion r;
+        boolean found = false;
         for(DrawPart part : parts){
             if(part instanceof RegionPart rp){
                 String realName = rp.name == null ? name + rp.suffix : rp.name;
                 if(rp.drawRegion && (r = get(realName)).found()){
                     for(TextureRegion r2 : rp.regions){
                         glowEquiv.put(r2, r);
+                        found = true;
                     }
                 }
+                if(rp.heat.found()){
+                    found = true;
+                }
                 if(!rp.children.isEmpty()){
-                    recursiveLoad(rp.children, name);
+                    found |= recursiveLoad(rp.children, name);
                 }
             }
         }
+        return found;
+    }
+
+    boolean loadDraws(DrawBlock db){
+        boolean found = false;
+
+        if(db instanceof DrawFlame df && (df.top != null && df.top.found())){
+            autoGlowRegions.add(df.top);
+            found = true;
+        }
+        if(db instanceof DrawPlasma dp){
+            for(TextureRegion r : dp.regions){
+                if(r.found()){
+                    autoGlowRegions.add(r);
+                    found = true;
+                }
+            }
+        }
+        if(db instanceof DrawWeave dw){
+            if(dw.weave.found()){
+                autoGlowRegions.add(dw.weave);
+                found = true;
+            }
+        }
+        if(db instanceof DrawMultiWeave dmw){
+            if(dmw.weave.found()){
+                autoGlowRegions.add(dmw.weave);
+                found = true;
+            }
+            if(dmw.glow.found()){
+                autoGlowRegions.add(dmw.glow);
+                found = true;
+            }
+        }
+        if(db instanceof DrawMulti dm){
+            for(DrawBlock drawer : dm.drawers){
+                found |= loadDraws(drawer);
+            }
+
+            found |= handleDrawers(dm.drawers, dm.drawers.length);
+        }
+
+        return found;
+    }
+    boolean handleDrawers(DrawBlock[] draws, int size){
+        //Might be a bad Idea.
+        boolean found = false;
+        for(int i = 0; i < size; i++){
+            DrawBlock d = draws[i];
+            if(drawOverride(d)){
+                draws[i] = new DrawGlowWrapper(d);
+                found = true;
+            }
+        }
+        return found;
+    }
+    boolean drawOverride(DrawBlock draw){
+        return (draw instanceof DrawCrucibleFlame || draw instanceof DrawSpikes || draw instanceof DrawShape || draw instanceof DrawFlame || draw instanceof DrawPulseShape || draw instanceof DrawArcSmelt);
     }
 
     void load(){
@@ -163,27 +254,57 @@ public class AdvanceLighting extends Mod{
         }
         */
         for(Block block : Vars.content.blocks()){
-            if(!block.update) continue;
+            boolean found = false;
+            
+            if(block instanceof TreeBlock || block instanceof TallBlock){
+                validBlocks.add(block.id);
+            }
+
+            if(!block.hasBuilding()){
+                continue;
+            }
+            TextureRegion tmr;
+            if(!(block instanceof Turret) && (tmr = get(block.name)).found()){
+                glowEquiv.put(block.region, tmr);
+            }
 
             if(block instanceof Turret tr && tr.drawer instanceof DrawTurret dtr){
                 TextureRegion r;
+                //Assume all turret parts go outside the block
+                found = true;
                 if(block.region.found() && (r = get(block.name)).found()){
                     glowEquiv.put(block.region, r);
+                    //found = true;
                 }
 
-                /*
-                for(DrawPart part : dtr.parts){
-                    if(part instanceof RegionPart rp){
-                        String realName = rp.name == null ? block.name + rp.suffix : rp.name;
-                        if(rp.drawRegion && (r = get(realName)).found()){
-                            for(TextureRegion r2 : rp.regions){
-                                glowEquiv.put(r2, r);
-                            }
-                        }
-                    }
-                }
-                 */
                 recursiveLoad(dtr.parts, block.name);
+            }
+            if(block instanceof GenericCrafter gc){
+                found = loadDraws(gc.drawer);
+
+                if(drawOverride(gc.drawer)){
+                    gc.drawer = new DrawGlowWrapper(gc.drawer);
+                    found = true;
+                }
+            }
+            if(block instanceof PowerGenerator pg){
+                found = loadDraws(pg.drawer);
+
+                if(drawOverride(pg.drawer)){
+                    pg.drawer = new DrawGlowWrapper(pg.drawer);
+                    found = true;
+                }
+            }
+
+            if(block instanceof HeatConductor || block instanceof HeatProducer || block instanceof PowerBlock){
+                if(!found){
+                    exludeRegions.add(block.region);
+                }
+                found = true;
+            }
+
+            if(found){
+                validBlocks.add(block.id);
             }
         }
 
@@ -230,17 +351,6 @@ public class AdvanceLighting extends Mod{
             for(Weapon w : unit.weapons){
                 TextureRegion r2;
                 if(!w.parts.isEmpty()){
-                    /*
-                    for(DrawPart part : w.parts){
-                        if(part instanceof RegionPart p){
-                            for(TextureRegion region : p.regions){
-                                if(region instanceof AtlasRegion ar && (r2 = get(ar.name)).found()){
-                                    glowEquiv.put(region, r2);
-                                }
-                            }
-                        }
-                    }
-                     */
                     recursiveLoad(w.parts, w.name);
                 }
                 if(w.region.found() && (r2 = get(w.name)).found()){
@@ -277,6 +387,34 @@ public class AdvanceLighting extends Mod{
         }
     }
 
+    void drawTiles(){
+        Team pteam = Vars.player.team();
+        batch.setExclude(true);
+        for(Tile tile : tileView){
+            Block block = tile.block();
+            Building build = tile.build;
+
+            Draw.z(Layer.block);
+
+            boolean visible = (build == null || !build.inFogTo(pteam));
+
+            if(block != Blocks.air && (visible || build.wasVisible) && validBlocks.contains(block.id)){
+                block.drawBase(tile);
+                Draw.reset();
+                Draw.z(Layer.block);
+
+                if(build != null){
+                    if(build.damaged()){
+                        Draw.z(Layer.blockCracks);
+                        build.drawCracks();
+                        Draw.z(Layer.block);
+                    }
+                }
+            }
+        }
+        batch.setExclude(false);
+    }
+
     void draw(){
         buffer.resize(Core.graphics.getWidth(), Core.graphics.getHeight());
 
@@ -290,7 +428,7 @@ public class AdvanceLighting extends Mod{
         batch.setAuto(Layer.power - 0.0001f, true);
         batch.setAuto(Layer.power + 0.0001f, false);
 
-        batch.addUncapture(Layer.floor, Layer.turret - 1f);
+        if(tileView == null) batch.addUncapture(Layer.floor, Layer.turret - 1f);
 
         batch.addUncapture(Layer.shields - 1f, Layer.shields + 1f);
         batch.addUncapture(Layer.buildBeam - 1f, Layer.buildBeam + 1f);
@@ -298,7 +436,11 @@ public class AdvanceLighting extends Mod{
         boolean light = Vars.state.rules.lighting;
         Vars.state.rules.lighting = false;
 
-        Vars.renderer.blocks.drawBlocks();
+        if(tileView == null){
+            Vars.renderer.blocks.drawBlocks();
+        }else{
+            drawTiles();
+        }
         Groups.draw.draw(Drawc::draw);
 
         Vars.state.rules.lighting = light;
