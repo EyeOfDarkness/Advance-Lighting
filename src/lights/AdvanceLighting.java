@@ -35,10 +35,10 @@ public class AdvanceLighting extends Mod{
     public static ObjectSet<TextureRegion> autoGlowRegions = new ObjectSet<>(), exludeRegions = new ObjectSet<>();
     public static IntMap<TextureRegion> uvGlowRegions = new IntMap<>();
     public static IntSet uvAutoGlowRegions = new IntSet(), validBlocks = new IntSet();
-    public static Shader screenShader;
+    public static Shader screenShader, smoothAlphaCutShader;
     public static AdditiveBloom bloom;
     public static boolean bloomActive;
-    static FrameBuffer buffer;
+    static FrameBuffer buffer, subBuffer, subBuffer2;
 
     static Seq<Tile> tileView;
 
@@ -50,6 +50,8 @@ public class AdvanceLighting extends Mod{
         Events.on(FileTreeInitEvent.class, e -> Core.app.post(() -> {
             batch = new AltLightBatch();
             buffer = new FrameBuffer();
+            subBuffer = new FrameBuffer();
+            subBuffer2 = new FrameBuffer();
             setBloom(true);
 
             screenShader = new Shader("""
@@ -69,6 +71,28 @@ public class AdvanceLighting extends Mod{
                                         
                     void main(){
                     	gl_FragColor = texture2D(u_texture, v_texCoords);
+                    }
+                    """);
+            smoothAlphaCutShader = new Shader("""
+                    attribute vec4 a_position;
+                    attribute vec2 a_texCoord0;
+                                        
+                    varying vec2 v_texCoords;
+                                        
+                    void main(){
+                        v_texCoords = a_texCoord0;
+                        gl_Position = a_position;
+                    }
+                    """, """
+                    uniform sampler2D u_texture;
+                                        
+                    varying vec2 v_texCoords;
+                                        
+                    void main(){
+                        vec4 c = texture2D(u_texture, v_texCoords);
+                        c.a = (c.a * c.a);
+                    
+                    	gl_FragColor = c;
                     }
                     """);
         }));
@@ -221,6 +245,9 @@ public class AdvanceLighting extends Mod{
                 found = true;
             }
         }
+        if(db instanceof DrawHeatInput || db instanceof DrawHeatOutput || db instanceof DrawHeatRegion){
+            found = true;
+        }
         if(db instanceof DrawMulti dm){
             for(DrawBlock drawer : dm.drawers){
                 found |= loadDraws(drawer);
@@ -296,12 +323,14 @@ public class AdvanceLighting extends Mod{
                 }
             }
 
+            /*
             if(block instanceof HeatConductor || block instanceof HeatProducer || block instanceof PowerBlock){
                 if(!found){
                     exludeRegions.add(block.region);
                 }
                 found = true;
             }
+            */
 
             if(found){
                 validBlocks.add(block.id);
@@ -389,7 +418,6 @@ public class AdvanceLighting extends Mod{
 
     void drawTiles(){
         Team pteam = Vars.player.team();
-        batch.setExclude(true);
         for(Tile tile : tileView){
             Block block = tile.block();
             Building build = tile.build;
@@ -398,7 +426,11 @@ public class AdvanceLighting extends Mod{
 
             boolean visible = (build == null || !build.inFogTo(pteam));
 
-            if(block != Blocks.air && (visible || build.wasVisible) && validBlocks.contains(block.id)){
+            if(block != Blocks.air && (visible || build.wasVisible)){
+                boolean valid = validBlocks.contains(block.id);
+
+                batch.setExcludeLayer(-100f, valid ? -100f : Layer.blockAfterCracks);
+
                 block.drawBase(tile);
                 Draw.reset();
                 Draw.z(Layer.block);
@@ -412,11 +444,13 @@ public class AdvanceLighting extends Mod{
                 }
             }
         }
-        batch.setExclude(false);
+        batch.setExcludeLayer();
     }
 
     void draw(){
         buffer.resize(Core.graphics.getWidth(), Core.graphics.getHeight());
+        subBuffer.resize(Core.graphics.getWidth(), Core.graphics.getHeight());
+        subBuffer2.resize(Core.graphics.getWidth(), Core.graphics.getHeight());
 
         buffer.begin(Color.clear);
         batch.begin();
@@ -430,11 +464,34 @@ public class AdvanceLighting extends Mod{
 
         if(tileView == null) batch.addUncapture(Layer.floor, Layer.turret - 1f);
 
-        batch.addUncapture(Layer.shields - 1f, Layer.shields + 1f);
+        //batch.addUncapture(Layer.shields - 1f, Layer.shields + 1f);
+
+        batch.setAuto(Layer.shields - 1f, true);
+        batch.setAuto(Layer.shields + 1f, false);
+
         batch.addUncapture(Layer.buildBeam - 1f, Layer.buildBeam + 1f);
 
         boolean light = Vars.state.rules.lighting;
         Vars.state.rules.lighting = false;
+
+        /*
+        if(Vars.renderer.animateShields && Shaders.shield != null){
+            FrameBuffer effectBuffer = Vars.renderer.effectBuffer;
+            Draw.drawRange(Layer.shields, () -> effectBuffer.begin(Color.clear), () -> {
+                effectBuffer.end();
+                effectBuffer.blit(Shaders.shield);
+            });
+        }
+         */
+        Draw.drawRange(Layer.shields, () -> subBuffer.begin(Color.clear), () -> {
+            subBuffer.end();
+
+            subBuffer2.begin(Color.clear);
+            subBuffer.blit((Vars.renderer.animateShields && Shaders.shield != null) ? Shaders.shield : screenShader);
+            subBuffer2.end();
+
+            subBuffer2.blit(smoothAlphaCutShader);
+        });
 
         if(tileView == null){
             Vars.renderer.blocks.drawBlocks();

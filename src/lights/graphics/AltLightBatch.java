@@ -17,16 +17,16 @@ public class AltLightBatch extends SpriteBatch{
 
     boolean glow = false;
     boolean glowTexture = false;
-    boolean excludeMode = false;
     float glowAlpha = 1f;
     Color blackAlpha = new Color();
     float blackAlphaBits = Color.blackFloatBits;
+
+    float excludeMinZ, excludeMaxZ;
 
     Batch lastBatch;
 
     final static int maxRequests = 2048;
     final static float[] tmpVert = new float[24];
-    final static Color tmpColor = new Color();
 
     public AltLightBatch(){
         super(maxRequests, createShaderL());
@@ -34,10 +34,6 @@ public class AltLightBatch extends SpriteBatch{
         for(int i = 0; i < maxRequests; i++){
             requests.add(new LightRequest());
         }
-    }
-
-    public void setExclude(boolean ex){
-        excludeMode = ex;
     }
 
     public void setGlow(boolean glow){
@@ -65,6 +61,14 @@ public class AltLightBatch extends SpriteBatch{
         Core.batch = lastBatch;
     }
 
+    public void setExcludeLayer(float min, float max){
+        excludeMinZ = min;
+        excludeMaxZ = max;
+    }
+    public void setExcludeLayer(){
+        excludeMinZ = excludeMaxZ = -100f;
+    }
+
     public void setAuto(float z, boolean auto){
         LightRequest rq = obtain();
         rq.z = z;
@@ -77,6 +81,10 @@ public class AltLightBatch extends SpriteBatch{
     }
     boolean invalid(){
         if(flushing) return false;
+        if(z >= excludeMinZ && z <= excludeMaxZ){
+            return true;
+        }
+
         int s = uncapture.size;
         float[] uc = uncapture.items;
         for(int i = 0; i < s; i += 2){
@@ -98,7 +106,7 @@ public class AltLightBatch extends SpriteBatch{
 
     @Override
     protected void draw(TextureRegion region, float x, float y, float originX, float originY, float width, float height, float rotation){
-        if(flushing || calls >= maxRequests || invalid() || (excludeMode && AdvanceLighting.exludeRegions.contains(region)) || glowAlpha <= 0f) return;
+        if(flushing || calls >= maxRequests || invalid() || glowAlpha <= 0f) return;
 
         LightRequest rq = obtain();
         float[] vertices = rq.vertices;
