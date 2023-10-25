@@ -19,6 +19,11 @@ public class LightRequest implements Comparable<LightRequest>{
 
     final static Color tc = new Color();
 
+    void convertGlow(){
+        for(int i = 2; i < 24; i += 6){
+            vertices[i] = color;
+        }
+    }
     void convertAutoColor(){
         //float color = this.color;
 

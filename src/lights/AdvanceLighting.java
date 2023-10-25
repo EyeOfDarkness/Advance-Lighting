@@ -12,6 +12,7 @@ import lights.parts.*;
 import mindustry.*;
 import mindustry.content.*;
 import mindustry.entities.part.*;
+import mindustry.entities.part.DrawPart.*;
 import mindustry.game.*;
 import mindustry.game.EventType.*;
 import mindustry.gen.*;
@@ -22,7 +23,6 @@ import mindustry.type.weapons.*;
 import mindustry.world.*;
 import mindustry.world.blocks.defense.turrets.*;
 import mindustry.world.blocks.environment.*;
-import mindustry.world.blocks.heat.*;
 import mindustry.world.blocks.power.*;
 import mindustry.world.blocks.production.*;
 import mindustry.world.draw.*;
@@ -32,17 +32,19 @@ import java.lang.reflect.*;
 public class AdvanceLighting extends Mod{
     public static AltLightBatch batch;
     public static ObjectMap<TextureRegion, TextureRegion> glowEquiv = new ObjectMap<>();
-    public static ObjectSet<TextureRegion> autoGlowRegions = new ObjectSet<>(), exludeRegions = new ObjectSet<>();
+    public static ObjectSet<TextureRegion> autoGlowRegions = new ObjectSet<>();
     public static IntMap<TextureRegion> uvGlowRegions = new IntMap<>();
     public static IntSet uvAutoGlowRegions = new IntSet(), validBlocks = new IntSet();
     public static Shader screenShader, smoothAlphaCutShader;
     public static AdditiveBloom bloom;
     public static boolean bloomActive;
     static FrameBuffer buffer, subBuffer, subBuffer2;
+    static Seq<TextureRegion> tmpRegions = new Seq<>(2);
 
     static Seq<Tile> tileView;
 
     static int bloomQuality = 4;
+    static boolean test = true;
 
     public AdvanceLighting(){
         if(Vars.headless) return;
@@ -90,7 +92,7 @@ public class AdvanceLighting extends Mod{
                                         
                     void main(){
                         vec4 c = texture2D(u_texture, v_texCoords);
-                        c.a = (c.a * c.a);
+                        c.a = (c.a * c.a) * 0.5 + c.a * 0.5;
                     
                     	gl_FragColor = c;
                     }
@@ -191,7 +193,33 @@ public class AdvanceLighting extends Mod{
         return Core.atlas.find(name + "-advance-light", Core.atlas.find("advance-lighting-" + name));
     }
 
-    boolean recursiveLoad(Seq<DrawPart> parts, String name){
+    Seq<TextureRegion> getHeat(String name){
+        tmpRegions.clear();
+        //TextureRegion right = Core.atlas.find(name + "-advance-light-heat");
+        TextureRegion right = find(name + "-advance-light-heat", name + "-advance-light-heat-r", "advance-lighting-" + name + "-heat", "advance-lighting-" + name + "-r-heat");
+        TextureRegion left = find(name + "-advance-light-heat-l", "advance-lighting-" + name + "-l-heat");
+
+        if(right.found()){
+            tmpRegions.add(right);
+            if(left.found()){
+                tmpRegions.add(left);
+            }
+        }
+
+        return tmpRegions;
+    }
+    TextureRegion find(String... name){
+        TextureRegion nil = Core.atlas.find(name[0]);
+
+        for(String s : name){
+            nil = Core.atlas.find(s);
+            if(nil.found()) return nil;
+        }
+
+        return nil;
+    }
+
+    boolean loadParts(Seq<DrawPart> parts, String name){
         TextureRegion r;
         boolean found = false;
         for(DrawPart part : parts){
@@ -207,7 +235,19 @@ public class AdvanceLighting extends Mod{
                     found = true;
                 }
                 if(!rp.children.isEmpty()){
-                    found |= recursiveLoad(rp.children, name);
+                    found |= loadParts(rp.children, name);
+                }
+
+                Seq<TextureRegion> st;
+                if(!(st = getHeat(realName)).isEmpty()){
+                    GlowHeatPart hp;
+                    if(st.size > 1){
+                        hp = new GlowHeatPart(rp, st.get(0), st.get(1));
+                    }else{
+                        hp = new GlowHeatPart(rp, st.get(0), null);
+                    }
+                    hp.turretShading = rp.turretShading;
+                    rp.children.add(hp);
                 }
             }
         }
@@ -220,6 +260,8 @@ public class AdvanceLighting extends Mod{
         if(db instanceof DrawFlame df && (df.top != null && df.top.found())){
             autoGlowRegions.add(df.top);
             found = true;
+
+            if(test) df.lightRadius = 0f;
         }
         if(db instanceof DrawPlasma dp){
             for(TextureRegion r : dp.regions){
@@ -290,6 +332,9 @@ public class AdvanceLighting extends Mod{
             if(!block.hasBuilding()){
                 continue;
             }
+
+            if(test) block.lightRadius = 0f;
+
             TextureRegion tmr;
             if(!(block instanceof Turret) && (tmr = get(block.name)).found()){
                 glowEquiv.put(block.region, tmr);
@@ -297,14 +342,28 @@ public class AdvanceLighting extends Mod{
 
             if(block instanceof Turret tr && tr.drawer instanceof DrawTurret dtr){
                 TextureRegion r;
+                Seq<TextureRegion> sr;
                 //Assume all turret parts go outside the block
-                found = true;
+                //found = true;
                 if(block.region.found() && (r = get(block.name)).found()){
                     glowEquiv.put(block.region, r);
                     //found = true;
                 }
 
-                recursiveLoad(dtr.parts, block.name);
+                loadParts(dtr.parts, block.name);
+
+                if(!(sr = getHeat(block.name)).isEmpty()){
+                    GlowHeatPart hp = new GlowHeatPart(PartProgress.heat, sr.get(0), null);
+                    /*
+                    if(sr.size > 1){
+                        hp = new GlowHeatPart(PartProgress.heat, sr.get(0), sr.get(1));
+                    }else{
+                        hp = new GlowHeatPart(PartProgress.heat, sr.get(0), null);
+                    }
+                     */
+                    hp.turretShading = false;
+                    dtr.parts.insert(0, hp);
+                }
             }
             if(block instanceof GenericCrafter gc){
                 found = loadDraws(gc.drawer);
@@ -375,12 +434,12 @@ public class AdvanceLighting extends Mod{
             }
 
             if(!unit.parts.isEmpty()){
-                recursiveLoad(unit.parts, unit.name);
+                loadParts(unit.parts, unit.name);
             }
             for(Weapon w : unit.weapons){
                 TextureRegion r2;
                 if(!w.parts.isEmpty()){
-                    recursiveLoad(w.parts, w.name);
+                    loadParts(w.parts, w.name);
                 }
                 if(w.region.found() && (r2 = get(w.name)).found()){
                     //TODO double flipping bug
@@ -412,7 +471,7 @@ public class AdvanceLighting extends Mod{
             }
 
             //TODO testing purposes remove
-            unit.lightRadius = 0f;
+            if(test) unit.lightRadius = 0f;
         }
     }
 
@@ -466,10 +525,13 @@ public class AdvanceLighting extends Mod{
 
         //batch.addUncapture(Layer.shields - 1f, Layer.shields + 1f);
 
-        batch.setAuto(Layer.shields - 1f, true);
-        batch.setAuto(Layer.shields + 1f, false);
+        batch.setLayerGlow(Layer.shields - 1f, true);
+        batch.setLayerGlow(Layer.shields + 1f, false);
 
-        batch.addUncapture(Layer.buildBeam - 1f, Layer.buildBeam + 1f);
+        batch.setLayerGlow(Layer.buildBeam - 1f, true);
+        batch.setLayerGlow(Layer.buildBeam + 1f, false);
+
+        //batch.addUncapture(Layer.buildBeam - 1f, Layer.buildBeam + 1f);
 
         boolean light = Vars.state.rules.lighting;
         Vars.state.rules.lighting = false;
@@ -483,7 +545,7 @@ public class AdvanceLighting extends Mod{
             });
         }
          */
-        Draw.drawRange(Layer.shields, () -> subBuffer.begin(Color.clear), () -> {
+        Draw.drawRange(Layer.shields, 1f, () -> subBuffer.begin(Color.clear), () -> {
             subBuffer.end();
 
             subBuffer2.begin(Color.clear);
@@ -492,6 +554,17 @@ public class AdvanceLighting extends Mod{
 
             subBuffer2.blit(smoothAlphaCutShader);
         });
+        if(Vars.renderer.animateShields && Shaders.shield != null){
+            Draw.drawRange(Layer.buildBeam, 1f, () -> subBuffer.begin(Color.clear), () -> {
+                subBuffer.end();
+
+                //subBuffer2.begin(Color.clear);
+                subBuffer.blit(Shaders.buildBeam);
+                //subBuffer2.end();
+
+                //subBuffer2.blit(smoothAlphaCutShader);
+            });
+        }
 
         if(tileView == null){
             Vars.renderer.blocks.drawBlocks();

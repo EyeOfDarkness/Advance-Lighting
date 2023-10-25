@@ -13,7 +13,7 @@ public class AltLightBatch extends SpriteBatch{
     FloatSeq uncapture = new FloatSeq();
     int calls = 0;
     boolean flushing;
-    boolean auto;
+    boolean auto, layerGlow;
 
     boolean glow = false;
     boolean glowTexture = false;
@@ -74,6 +74,11 @@ public class AltLightBatch extends SpriteBatch{
         rq.z = z;
         //rq.texture = null;
         rq.action = (byte)(1 | ((auto ? 1 : 0) << 1));
+    }
+    public void setLayerGlow(float z, boolean auto){
+        LightRequest rq = obtain();
+        rq.z = z;
+        rq.action = (byte)(1 | ((auto ? 1 : 0) << 2));
     }
 
     public void addUncapture(float lowZ, float highZ){
@@ -314,13 +319,18 @@ public class AltLightBatch extends SpriteBatch{
             for(LightRequest r : requests){
                 if(r.texture != null){
                     if(auto) r.convertAutoColor();
+                    if(layerGlow) r.convertGlow();
                     if(blending != r.blend) setBlending(r.blend);
                     superDraw(r.texture, r.vertices);
                 }else if(r.run != null){
                     r.run.run();
                 }else{
                     byte action = r.action;
-                    if(action != 0) auto = action != 1;
+                    if(action != 0){
+                        //auto = action != 1;
+                        auto = (action & 2) != 0;
+                        layerGlow = (action & 4) != 0;
+                    }
                 }
             }
             requests.size = size;
