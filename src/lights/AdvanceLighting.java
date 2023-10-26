@@ -322,6 +322,7 @@ public class AdvanceLighting extends Mod{
             Log.info(tex.getTextureObjectHandle());
         }
         */
+        //TODO power lasers
         for(Block block : Vars.content.blocks()){
             boolean found = false;
             
@@ -380,6 +381,10 @@ public class AdvanceLighting extends Mod{
                     pg.drawer = new DrawGlowWrapper(pg.drawer);
                     found = true;
                 }
+            }
+            if(block instanceof PowerNode pn){
+                autoGlowRegions.add(pn.laserEnd);
+                uvAutoGlowRegions.add(UVStruct.uv(pn.laser.texture, pn.laser.u, pn.laser.v));
             }
 
             /*
@@ -518,8 +523,8 @@ public class AdvanceLighting extends Mod{
         batch.setGlow(false);
         batch.setAuto(Layer.bullet - 0.02f, true);
         batch.setAuto(Layer.effect + 0.02f, false);
-        batch.setAuto(Layer.power - 0.0001f, true);
-        batch.setAuto(Layer.power + 0.0001f, false);
+        //batch.setAuto(Layer.power - 0.0001f, true);
+        //batch.setAuto(Layer.power + 0.0001f, false);
 
         if(tileView == null) batch.addUncapture(Layer.floor, Layer.turret - 1f);
 
