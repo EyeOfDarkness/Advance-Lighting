@@ -44,7 +44,7 @@ public class AdvanceLighting extends Mod{
     static Seq<Tile> tileView;
 
     static int bloomQuality = 4;
-    static boolean test = true;
+    static boolean test = false;
 
     public AdvanceLighting(){
         if(Vars.headless) return;

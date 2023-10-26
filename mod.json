@@ -2,7 +2,7 @@
     "name": "advance-lighting",
     "displayName": "Advance lighting",
     "author": "EoD",
-    "description": "Not recommended for weak devices. Only supports Vanilla/Supported-Json content. This mod replaces/add some effects, and may cause issues with mods that actively check on those effects.",
+    "description": "Not recommended for weak devices. Only supports Vanilla/Supported-Json content. This mod replaces/add some effects, and may cause issues with mods that actively check on those effects. May conflict with vanilla bloom.",
     "version": "v1.0.0",
     "minGameVersion": 145,
     "main": "lights.AdvanceLighting",
