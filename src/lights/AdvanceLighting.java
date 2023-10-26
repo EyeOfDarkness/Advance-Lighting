@@ -126,7 +126,7 @@ public class AdvanceLighting extends Mod{
         bloomQuality = Core.settings.getInt("al-bloom-quality", 4);
         setBloom(Core.settings.getBool("al-bloom-enabled", false));
 
-        Vars.ui.settings.addCategory("advance-lighting", "advance-lighting-setting-icon", st -> {
+        Vars.ui.settings.addCategory("@advance-lighting", "advance-lighting-setting-icon", st -> {
             st.checkPref("al-bloom-enabled", false, this::setBloom);
             st.sliderPref("al-bloom-quality", 4, 1, 6, s -> {
                 bloomQuality = s;
