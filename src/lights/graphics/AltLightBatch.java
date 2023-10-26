@@ -111,6 +111,14 @@ public class AltLightBatch extends SpriteBatch{
 
     @Override
     protected void draw(TextureRegion region, float x, float y, float originX, float originY, float width, float height, float rotation){
+        if(flushing){
+            float c = colorPacked;
+            colorPacked = glow ? colorPacked : blackAlphaBits;
+
+            super.draw(region, x, y, originX, originY, width, height, rotation);
+
+            colorPacked = c;
+        }
         if(flushing || calls >= maxRequests || invalid() || glowAlpha <= 0f) return;
 
         LightRequest rq = obtain();
@@ -246,6 +254,15 @@ public class AltLightBatch extends SpriteBatch{
             return;
         }
         */
+        if(flushing){
+            float[] tmp = tmpVert;
+
+            float color = glow ? colorPacked : blackAlphaBits;
+            for(int i = 2; i < 24; i += 6){
+                tmp[i] = color;
+            }
+            superDraw(texture, tmp);
+        }
         if(flushing || calls >= maxRequests || invalid() || glowAlpha <= 0f) return;
 
         LightRequest rq = obtain();
@@ -302,7 +319,10 @@ public class AltLightBatch extends SpriteBatch{
 
     @Override
     protected void draw(Runnable request){
-        if(flushing) return;
+        if(flushing){
+            request.run();
+            return;
+        }
         LightRequest r = obtain();
         r.run = request;
         r.z = z;
