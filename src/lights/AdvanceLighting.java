@@ -44,11 +44,20 @@ public class AdvanceLighting extends Mod{
     static Seq<Tile> tileView;
 
     static int bloomQuality = 4;
+    static boolean hideVanillaLights = false;
     static boolean test = false;
+
+    private static Seq<Runnable> lights;
+    private static Field circleCount;
 
     public AdvanceLighting(){
         if(Vars.headless) return;
         Events.run(Trigger.drawOver, () -> Draw.draw(Layer.light + 5f, this::draw));
+        Events.run(Trigger.draw, () -> {
+            if(hideVanillaLights && Vars.enableLight && Vars.renderer.lights.enabled() && Vars.state.rules.infiniteResources){
+                Draw.draw(Layer.light - 0.01f, this::hideLights);
+            }
+        });
         Events.on(FileTreeInitEvent.class, e -> Core.app.post(() -> {
             batch = new AltLightBatch();
             buffer = new FrameBuffer();
@@ -120,10 +129,22 @@ public class AdvanceLighting extends Mod{
             tileView = null;
             Log.err(ex);
         }
+        try{
+            Field fr = LightRenderer.class.getDeclaredField("lights");
+            fr.setAccessible(true);
+            Field r = LightRenderer.class.getDeclaredField("circleIndex");
+            r.setAccessible(true);
+
+            lights = (Seq<Runnable>)fr.get(Vars.renderer.lights);
+            circleCount = r;
+        }catch(Exception ex){
+            Log.err(ex);
+        }
     }
 
     void loadSettings(){
         bloomQuality = Core.settings.getInt("al-bloom-quality", 4);
+        hideVanillaLights = Core.settings.getBool("al-hide-lights", false);
         setBloom(Core.settings.getBool("al-bloom-enabled", false));
 
         Vars.ui.settings.addCategory("@advance-lighting", "advance-lighting-setting-icon", st -> {
@@ -171,6 +192,8 @@ public class AdvanceLighting extends Mod{
                 }
                 return (s / 100f) + "";
             });
+
+            st.checkPref("al-hide-lights", false, b -> hideVanillaLights = b);
         });
     }
 
@@ -400,6 +423,10 @@ public class AdvanceLighting extends Mod{
             }
         }
 
+        autoGlowRegions.add(Core.atlas.find("minelaser-end"));
+        TextureRegion mineLaser = Core.atlas.find("minelaser");
+        uvAutoGlowRegions.add(UVStruct.uv(mineLaser.texture, mineLaser.u, mineLaser.v));
+
         for(UnitType unit : Vars.content.units()){
             if(unit.internal) continue;
             TextureRegion r;
@@ -592,6 +619,16 @@ public class AdvanceLighting extends Mod{
         if(bloomActive && bloom != null){
             bloom.resize(Core.graphics.getWidth(), Core.graphics.getHeight(), bloomQuality);
             bloom.render(buffer.getTexture());
+        }
+    }
+
+    void hideLights(){
+        try{
+            lights.clear();
+            circleCount.setInt(Vars.renderer.lights, 0);
+        }catch(Exception e){
+            Log.err(e);
+            hideVanillaLights = false;
         }
     }
 }
