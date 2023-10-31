@@ -280,6 +280,10 @@ public class AdvanceLighting extends Mod{
     boolean loadDraws(DrawBlock db){
         boolean found = false;
 
+        if(db instanceof DrawWarmupRegion dw){
+            autoGlowRegions.add(dw.region);
+            found = true;
+        }
         if(db instanceof DrawFlame df && (df.top != null && df.top.found())){
             autoGlowRegions.add(df.top);
             found = true;
@@ -336,7 +340,7 @@ public class AdvanceLighting extends Mod{
         return found;
     }
     boolean drawOverride(DrawBlock draw){
-        return (draw instanceof DrawCrucibleFlame || draw instanceof DrawSpikes || draw instanceof DrawShape || draw instanceof DrawFlame || draw instanceof DrawPulseShape || draw instanceof DrawArcSmelt);
+        return (draw instanceof DrawCrucibleFlame || draw instanceof DrawWeave || draw instanceof DrawSpikes || draw instanceof DrawShape || draw instanceof DrawFlame || draw instanceof DrawPulseShape || draw instanceof DrawArcSmelt);
     }
 
     void load(){
