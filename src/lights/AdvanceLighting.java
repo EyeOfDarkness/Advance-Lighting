@@ -52,7 +52,7 @@ public class AdvanceLighting extends Mod{
 
     public AdvanceLighting(){
         if(Vars.headless) return;
-        Events.run(Trigger.drawOver, () -> Draw.draw(Layer.light + 5f, this::draw));
+        Events.run(Trigger.drawOver, () -> Draw.draw(Layer.fogOfWar + 2f, this::draw));
         Events.run(Trigger.draw, () -> {
             if(hideVanillaLights && Vars.enableLight && Vars.renderer.lights.enabled() && Vars.state.rules.infiniteResources){
                 Draw.draw(Layer.light - 0.01f, this::hideLights);
@@ -610,6 +610,14 @@ public class AdvanceLighting extends Mod{
 
         batch.end();
         //Lines.useLegacyLine = false;
+        if(Vars.state.rules.fog && Vars.state.rules.staticFog){
+            Draw.shader(Shaders.fog);
+            Draw.color(Color.black);
+            Draw.fbo(Vars.renderer.fog.getStaticTexture(), Vars.world.width(), Vars.world.height(), Vars.tilesize, Vars.tilesize/2f);
+
+            Draw.shader();
+        }
+
         buffer.end();
         Draw.flush();
         Gl.blendEquationSeparate(Gl.max, Gl.max);
