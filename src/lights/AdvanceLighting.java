@@ -49,7 +49,7 @@ public class AdvanceLighting extends Mod{
     static int bloomQuality = 4;
     static boolean hideVanillaLights = false, renderEnvironment = true;
     static boolean test = false;
-    static IntSet onLiquid = new IntSet();
+    static IntSet onGlowingTile = new IntSet();
     static StaticBlockRenderer staticRenderer;
     public static IntSet glowLiquid = IntSet.with(CacheLayer.slag.id, CacheLayer.cryofluid.id, CacheLayer.space.id);
 
@@ -123,14 +123,14 @@ public class AdvanceLighting extends Mod{
             });
         });
         Events.on(ResetEvent.class, e -> {
-            onLiquid.clear();
+            onGlowingTile.clear();
         });
         Events.on(TileChangeEvent.class, e -> {
             Tile tile = e.tile;
             handleLiquidTile(tile);
         });
         Events.on(TilePreChangeEvent.class, e -> {
-            onLiquid.remove(e.tile.pos());
+            onGlowingTile.remove(e.tile.pos());
         });
         Events.on(WorldLoadEvent.class, e -> {
             if(renderEnvironment){
@@ -148,7 +148,7 @@ public class AdvanceLighting extends Mod{
         if(!renderEnvironment) return;
 
         if(glowLiquid.contains(tile.floor().cacheLayer.id) && tile.block().isAir()){
-            onLiquid.remove(tile.pos());
+            onGlowingTile.remove(tile.pos());
         }
         Block block = tile.block();
         if(block == Blocks.air || block.isStatic()) return;
@@ -165,7 +165,7 @@ public class AdvanceLighting extends Mod{
                 int worldy = dy + offset + tile.y;
 
                 Tile other1 = Vars.world.tile(worldx, worldy);
-                if(other1 != null && glowLiquid.contains(other1.floor().cacheLayer.id)){
+                if(other1 != null && (glowLiquid.contains(other1.floor().cacheLayer.id) || (glowingEnvTiles.get(other1.floor().id) != null))){
                     shouldAdd = true;
                     break scan;
                 }
@@ -175,7 +175,7 @@ public class AdvanceLighting extends Mod{
                     int ox = worldx + d.x, oy = worldy + d.y;
 
                     Tile other2 = Vars.world.tile(ox, oy);
-                    if(other2 != null && glowLiquid.contains(other2.floor().cacheLayer.id)){
+                    if(other2 != null && (glowLiquid.contains(other2.floor().cacheLayer.id))){
                         shouldAdd = true;
                         break scan;
                     }
@@ -183,7 +183,7 @@ public class AdvanceLighting extends Mod{
             }
         }
         if(shouldAdd){
-            onLiquid.add(tile.pos());
+            onGlowingTile.add(tile.pos());
         }
     }
 
@@ -676,7 +676,7 @@ public class AdvanceLighting extends Mod{
             boolean visible = (build == null || !build.inFogTo(pteam));
 
             if(block != Blocks.air && (visible || build.wasVisible)){
-                boolean valid = validBlocks.contains(block.id) || onLiquid.contains(tile.pos());
+                boolean valid = validBlocks.contains(block.id) || onGlowingTile.contains(tile.pos());
 
                 batch.setExcludeLayer(-100f, valid ? -100f : Layer.blockAfterCracks);
 
