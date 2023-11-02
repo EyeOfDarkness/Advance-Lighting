@@ -736,6 +736,12 @@ public class AdvanceLighting extends Mod{
         batch.setLayerGlow(Layer.buildBeam + 1f, false);
 
         Draw.draw(Layer.plans, () -> Vars.renderer.overlays.drawBottom());
+        Draw.draw(Layer.overlayUI, () -> {
+            float lt = Time.delta;
+            Time.delta = 0f;
+            Vars.renderer.overlays.drawTop();
+            Time.delta = lt;
+        });
 
         //batch.addUncapture(Layer.buildBeam - 1f, Layer.buildBeam + 1f);
 
