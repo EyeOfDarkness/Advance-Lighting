@@ -39,6 +39,9 @@ public class AltLightBatch extends SpriteBatch{
     public void setGlow(boolean glow){
         this.glow = glow;
     }
+    public boolean getGlow(){
+        return glow;
+    }
 
     public void begin(){
         lastBatch = Core.batch;
@@ -242,8 +245,8 @@ public class AltLightBatch extends SpriteBatch{
         }
     }
     
-    void superDraw(Texture texture, float[] spriteVertices){
-        super.draw(texture, spriteVertices, 0, 24);
+    public void superDraw(Texture texture, float[] spriteVertices, int count){
+        super.draw(texture, spriteVertices, 0, count);
     }
 
     @Override
@@ -261,7 +264,7 @@ public class AltLightBatch extends SpriteBatch{
             for(int i = 2; i < 24; i += 6){
                 tmp[i] = color;
             }
-            superDraw(texture, tmp);
+            superDraw(texture, tmp, 24);
         }
         if(flushing || calls >= maxRequests || invalid() || glowAlpha <= 0f) return;
 
@@ -341,7 +344,7 @@ public class AltLightBatch extends SpriteBatch{
                     if(auto) r.convertAutoColor();
                     if(layerGlow) r.convertGlow();
                     if(blending != r.blend) setBlending(r.blend);
-                    superDraw(r.texture, r.vertices);
+                    superDraw(r.texture, r.vertices, 24);
                 }else if(r.run != null){
                     r.run.run();
                 }else{

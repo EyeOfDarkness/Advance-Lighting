@@ -5,9 +5,11 @@ import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.graphics.g2d.TextureAtlas.*;
 import arc.graphics.gl.*;
+import arc.math.geom.*;
 import arc.struct.*;
 import arc.util.*;
 import lights.graphics.*;
+import lights.graphics.StaticBlockRenderer.*;
 import lights.parts.*;
 import mindustry.*;
 import mindustry.content.*;
@@ -34,6 +36,7 @@ public class AdvanceLighting extends Mod{
     public static ObjectMap<TextureRegion, TextureRegion> glowEquiv = new ObjectMap<>();
     public static ObjectSet<TextureRegion> autoGlowRegions = new ObjectSet<>();
     public static IntMap<TextureRegion> uvGlowRegions = new IntMap<>();
+    public static IntMap<EnviroGlow> glowingEnvTiles = new IntMap<>();
     public static IntSet uvAutoGlowRegions = new IntSet(), validBlocks = new IntSet();
     public static Shader screenShader, smoothAlphaCutShader;
     public static AdditiveBloom bloom;
@@ -44,8 +47,11 @@ public class AdvanceLighting extends Mod{
     static Seq<Tile> tileView;
 
     static int bloomQuality = 4;
-    static boolean hideVanillaLights = false;
+    static boolean hideVanillaLights = false, renderEnvironment = true;
     static boolean test = false;
+    static IntSet onLiquid = new IntSet();
+    static StaticBlockRenderer staticRenderer;
+    public static IntSet glowLiquid = IntSet.with(CacheLayer.slag.id, CacheLayer.cryofluid.id, CacheLayer.space.id);
 
     private static Seq<Runnable> lights;
     private static Field circleCount;
@@ -63,6 +69,7 @@ public class AdvanceLighting extends Mod{
             buffer = new FrameBuffer();
             subBuffer = new FrameBuffer();
             subBuffer2 = new FrameBuffer();
+            staticRenderer = new StaticBlockRenderer();
             setBloom(true);
 
             screenShader = new Shader("""
@@ -115,6 +122,69 @@ public class AdvanceLighting extends Mod{
                 loadTileView();
             });
         });
+        Events.on(ResetEvent.class, e -> {
+            onLiquid.clear();
+        });
+        Events.on(TileChangeEvent.class, e -> {
+            Tile tile = e.tile;
+            handleLiquidTile(tile);
+        });
+        Events.on(TilePreChangeEvent.class, e -> {
+            onLiquid.remove(e.tile.pos());
+        });
+        Events.on(WorldLoadEvent.class, e -> {
+            if(renderEnvironment){
+                staticRenderer.begin();
+                for(Tile tile : Vars.world.tiles){
+                    handleLiquidTile(tile);
+                    staticRenderer.handleTile(tile);
+                }
+                staticRenderer.end();
+            }
+        });
+    }
+
+    void handleLiquidTile(Tile tile){
+        if(!renderEnvironment) return;
+
+        if(glowLiquid.contains(tile.floor().cacheLayer.id) && tile.block().isAir()){
+            onLiquid.remove(tile.pos());
+        }
+        Block block = tile.block();
+        if(block == Blocks.air || block.isStatic()) return;
+
+        int offset = -(block.size - 1) / 2;
+
+        //boolean shouldAdd = glowLiquid.contains(tile.floor().cacheLayer.id);
+        boolean shouldAdd = false;
+
+        scan:
+        for(int dx = 0; dx < block.size; dx++){
+            for(int dy = 0; dy < block.size; dy++){
+                int worldx = dx + offset + tile.x;
+                int worldy = dy + offset + tile.y;
+
+                Tile other1 = Vars.world.tile(worldx, worldy);
+                if(other1 != null && glowLiquid.contains(other1.floor().cacheLayer.id)){
+                    shouldAdd = true;
+                    break scan;
+                }
+
+                //inefficient
+                for(Point2 d : Geometry.d8){
+                    int ox = worldx + d.x, oy = worldy + d.y;
+
+                    Tile other2 = Vars.world.tile(ox, oy);
+                    if(other2 != null && glowLiquid.contains(other2.floor().cacheLayer.id)){
+                        shouldAdd = true;
+                        break scan;
+                    }
+                }
+            }
+        }
+        if(shouldAdd){
+            onLiquid.add(tile.pos());
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -124,7 +194,6 @@ public class AdvanceLighting extends Mod{
             f.setAccessible(true);
 
             tileView = (Seq<Tile>)f.get(Vars.renderer.blocks);
-            Log.info(tileView);
         }catch(Exception ex){
             tileView = null;
             Log.err(ex);
@@ -146,9 +215,14 @@ public class AdvanceLighting extends Mod{
         bloomQuality = Core.settings.getInt("al-bloom-quality", 4);
         hideVanillaLights = Core.settings.getBool("al-hide-lights", false);
         setBloom(Core.settings.getBool("al-bloom-enabled", false));
+        renderEnvironment = Core.settings.getBool("al-environment-enabled", true);
 
         Vars.ui.settings.addCategory("@advance-lighting", "advance-lighting-setting-icon", st -> {
             st.checkPref("al-bloom-enabled", false, this::setBloom);
+            st.checkPref("al-environment-enabled", renderEnvironment);
+
+            st.row();
+
             st.sliderPref("al-bloom-quality", 4, 1, 6, s -> {
                 bloomQuality = s;
                 if(s > 1){
@@ -192,6 +266,8 @@ public class AdvanceLighting extends Mod{
                 }
                 return (s / 100f) + "";
             });
+
+            st.row();
 
             st.checkPref("al-hide-lights", false, b -> hideVanillaLights = b);
         });
@@ -349,8 +425,90 @@ public class AdvanceLighting extends Mod{
             Log.info(tex.getTextureObjectHandle());
         }
         */
+        EnviroGlow env = new EnviroGlow();
+        TextureRegion[] tmpVariants = new TextureRegion[16];
+        int tmpVariantsSize;
+
         for(Block block : Vars.content.blocks()){
             boolean found = false;
+
+            if(renderEnvironment){
+                tmpVariantsSize = -1;
+                if(block instanceof Floor fr && fr.cacheLayer == CacheLayer.normal){
+                    boolean envf = false;
+                    boolean hasVariants = fr.variantRegions != null;
+
+                    //env.variants = new TextureRegion[fr.variantRegions.length];
+
+                    if(hasVariants){
+                        for(int i = 0; i < fr.variantRegions.length; i++){
+                            AtlasRegion ar = fr.variantRegions[i].asAtlas();
+                            TextureRegion gr;
+                            if((gr = get(ar.name)).found()){
+                                envf = true;
+                                tmpVariants[i] = gr;
+                            }else{
+                                tmpVariants[i] = null;
+                            }
+                        }
+                    }
+                    if(envf){
+                        env.variants = new TextureRegion[fr.variantRegions.length];
+                        System.arraycopy(tmpVariants, 0, env.variants, 0, env.variants.length);
+                        env.floor = true;
+
+                        glowingEnvTiles.put(block.id, env);
+                        env = new EnviroGlow();
+                    }
+                }
+                if(block instanceof StaticWall sw){
+                    boolean envf = false;
+
+                    if(block.variants > 0 && block.variantRegions != null){
+                        int i = 0;
+                        for(TextureRegion r : block.variantRegions){
+                            AtlasRegion ar = r.asAtlas();
+                            TextureRegion gr;
+                            if((gr = get(ar.name)).found()){
+                                envf = true;
+                                tmpVariants[i] = gr;
+                            }else{
+                                tmpVariants[i] = null;
+                            }
+                            i++;
+                        }
+                        if(envf){
+                            tmpVariantsSize = block.variants;
+                        }
+                    }else{
+                        AtlasRegion ar = block.region.asAtlas();
+                        TextureRegion gr;
+                        if((gr = get(ar.name)).found()){
+                            envf = true;
+                            env.region = gr;
+                        }
+                    }
+                    if(sw.large.found()){
+                        TextureRegion gr;
+                        if((gr = get(sw.large.asAtlas().name)).found()){
+                            envf = true;
+                            env.large = gr;
+                        }
+                    }
+
+                    if(envf){
+                        env.floor = false;
+                        env.largeFound = sw.large.found();
+                        if(tmpVariantsSize > 0){
+                            env.variants = new TextureRegion[tmpVariantsSize];
+                            System.arraycopy(tmpVariants, 0, env.variants, 0, env.variants.length);
+                        }
+
+                        glowingEnvTiles.put(block.id, env);
+                        env = new EnviroGlow();
+                    }
+                }
+            }
             
             if(block instanceof TreeBlock || block instanceof TallBlock){
                 validBlocks.add(block.id);
@@ -504,9 +662,6 @@ public class AdvanceLighting extends Mod{
                 unit.engines.clear();
                 unit.engines.add(ge);
             }
-
-            //TODO testing purposes remove
-            if(test) unit.lightRadius = 0f;
         }
     }
 
@@ -521,7 +676,7 @@ public class AdvanceLighting extends Mod{
             boolean visible = (build == null || !build.inFogTo(pteam));
 
             if(block != Blocks.air && (visible || build.wasVisible)){
-                boolean valid = validBlocks.contains(block.id);
+                boolean valid = validBlocks.contains(block.id) || onLiquid.contains(tile.pos());
 
                 batch.setExcludeLayer(-100f, valid ? -100f : Layer.blockAfterCracks);
 
@@ -550,6 +705,22 @@ public class AdvanceLighting extends Mod{
         batch.begin();
         //Lines.useLegacyLine = true;
 
+        if(renderEnvironment){
+            Draw.draw(Layer.floor, () -> {
+                staticRenderer.drawFloors();
+                //Draw.flush();
+
+                FloorRenderer fr = Vars.renderer.blocks.floor;
+
+                fr.beginDraw();
+                fr.drawLayer(CacheLayer.slag);
+                fr.drawLayer(CacheLayer.cryofluid);
+                fr.drawLayer(CacheLayer.space);
+                fr.endDraw();
+            });
+            Draw.draw(Layer.block - 0.09f, () -> staticRenderer.drawWalls());
+        }
+
         batch.setGlow(false);
         batch.setAuto(Layer.bullet - 0.02f, true);
         batch.setAuto(Layer.effect + 0.02f, false);
@@ -563,6 +734,8 @@ public class AdvanceLighting extends Mod{
 
         batch.setLayerGlow(Layer.buildBeam - 1f, true);
         batch.setLayerGlow(Layer.buildBeam + 1f, false);
+
+        Draw.draw(Layer.plans, () -> Vars.renderer.overlays.drawBottom());
 
         //batch.addUncapture(Layer.buildBeam - 1f, Layer.buildBeam + 1f);
 
