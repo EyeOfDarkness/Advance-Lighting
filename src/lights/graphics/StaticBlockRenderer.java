@@ -39,6 +39,7 @@ public class StaticBlockRenderer{
         buffer.begin(Color.clear);
         edges.clear();
         glowing.clear();
+        glowingFloor.clear();
 
         Draw.proj().setOrtho(0, 0, buffer.getWidth(), buffer.getHeight());
     }
