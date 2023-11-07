@@ -1,6 +1,7 @@
 package lights.graphics;
 
 import arc.*;
+import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.graphics.gl.*;
@@ -14,6 +15,7 @@ public class AltLightBatch extends SpriteBatch{
     int calls = 0;
     boolean flushing;
     boolean auto, layerGlow;
+    boolean liquidMode = false;
 
     boolean glow = false;
     boolean glowTexture = false;
@@ -27,6 +29,7 @@ public class AltLightBatch extends SpriteBatch{
 
     final static int maxRequests = 2048;
     final static float[] tmpVert = new float[24];
+    final static Color tmpColor = new Color();
 
     public AltLightBatch(){
         super(maxRequests, createShaderL());
@@ -36,6 +39,9 @@ public class AltLightBatch extends SpriteBatch{
         }
     }
 
+    public void setLiquidMode(boolean liq){
+        liquidMode = liq;
+    }
     public void setGlow(boolean glow){
         this.glow = glow;
     }
@@ -129,6 +135,12 @@ public class AltLightBatch extends SpriteBatch{
 
         float color = (glow || AdvanceLighting.autoGlowRegions.contains(region)) ? this.colorPacked : blackAlphaBits;
         float mixColor = this.mixColorPacked;
+
+        if(liquidMode && !glow){
+            float v = AdvanceLighting.glowingLiquidColorsFunc.get(this.color);
+            tmpColor.set(blackAlpha).lerp(this.color, v);
+            color = tmpColor.toFloatBits();
+        }
 
         rq.texture = region.texture;
         rq.color = colorPacked;
@@ -287,7 +299,7 @@ public class AltLightBatch extends SpriteBatch{
             }
         }
          */
-        float color = (glow || AdvanceLighting.uvAutoGlowRegions.contains(UVStruct.uv(texture, vertices[3], vertices[4]))) ? colorPacked : blackAlphaBits;
+        float color = (glow || AdvanceLighting.uvAutoGlowRegions.contains(ALStructs.uv(texture, vertices[3], vertices[4]))) ? colorPacked : blackAlphaBits;
         for(int i = 2; i < 24; i += 6){
             vertices[i] = color;
         }
@@ -295,7 +307,7 @@ public class AltLightBatch extends SpriteBatch{
         if(!glowTexture){
             TextureRegion r;
             float su = spriteVertices[3], sv = spriteVertices[4];
-            if((r = AdvanceLighting.uvGlowRegions.get(UVStruct.uv(texture, su, sv))) != null){
+            if((r = AdvanceLighting.uvGlowRegions.get(ALStructs.uv(texture, su, sv))) != null){
                 boolean lg = glow;
                 glowTexture = true;
                 glow = true;

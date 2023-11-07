@@ -1,10 +1,12 @@
 package lights;
 
 import arc.*;
+import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.graphics.g2d.TextureAtlas.*;
 import arc.graphics.gl.*;
+import arc.math.*;
 import arc.math.geom.*;
 import arc.struct.*;
 import arc.util.*;
@@ -25,6 +27,7 @@ import mindustry.type.weapons.*;
 import mindustry.world.*;
 import mindustry.world.blocks.defense.turrets.*;
 import mindustry.world.blocks.environment.*;
+import mindustry.world.blocks.liquid.*;
 import mindustry.world.blocks.power.*;
 import mindustry.world.blocks.production.*;
 import mindustry.world.draw.*;
@@ -34,6 +37,7 @@ import java.lang.reflect.*;
 public class AdvanceLighting extends Mod{
     public static AltLightBatch batch;
     public static ObjectMap<TextureRegion, TextureRegion> glowEquiv = new ObjectMap<>();
+    public static ObjectMap<TextureRegion, Floatf<Color>> conditionalGlow = new ObjectMap<>();
     public static ObjectSet<TextureRegion> autoGlowRegions = new ObjectSet<>();
     public static IntMap<TextureRegion> uvGlowRegions = new IntMap<>();
     public static IntMap<EnviroGlow> glowingEnvTiles = new IntMap<>();
@@ -51,7 +55,17 @@ public class AdvanceLighting extends Mod{
     static boolean test = false;
     static IntSet onGlowingTile = new IntSet();
     static StaticBlockRenderer staticRenderer;
-    public static IntSet glowLiquid = IntSet.with(CacheLayer.slag.id, CacheLayer.cryofluid.id, CacheLayer.space.id);
+    public static IntFloatMap glowingLiquidColors = new IntFloatMap();
+    public static IntSet glowLiquidFloors = IntSet.with(CacheLayer.slag.id, CacheLayer.cryofluid.id, CacheLayer.space.id),
+            glowingLiquids = new IntSet(), liquidBlocks = new IntSet();
+    public static Floatf<Color> glowingLiquidColorsFunc = c -> {
+        float v;
+        if((v = glowingLiquidColors.get(ALStructs.rgb(c), -1f)) != -1f){
+            return v;
+        }
+
+        return 0f;
+    };
 
     private static Seq<Runnable> lights;
     private static Field circleCount;
@@ -147,7 +161,7 @@ public class AdvanceLighting extends Mod{
     void handleLiquidTile(Tile tile){
         if(!renderEnvironment) return;
 
-        if(glowLiquid.contains(tile.floor().cacheLayer.id) && tile.block().isAir()){
+        if(glowLiquidFloors.contains(tile.floor().cacheLayer.id) && tile.block().isAir()){
             onGlowingTile.remove(tile.pos());
         }
         Block block = tile.block();
@@ -165,7 +179,7 @@ public class AdvanceLighting extends Mod{
                 int worldy = dy + offset + tile.y;
 
                 Tile other1 = Vars.world.tile(worldx, worldy);
-                if(other1 != null && (glowLiquid.contains(other1.floor().cacheLayer.id) || (glowingEnvTiles.get(other1.floor().id) != null))){
+                if(other1 != null && (glowLiquidFloors.contains(other1.floor().cacheLayer.id) || (glowingEnvTiles.get(other1.floor().id) != null))){
                     shouldAdd = true;
                     break scan;
                 }
@@ -175,7 +189,7 @@ public class AdvanceLighting extends Mod{
                     int ox = worldx + d.x, oy = worldy + d.y;
 
                     Tile other2 = Vars.world.tile(ox, oy);
-                    if(other2 != null && (glowLiquid.contains(other2.floor().cacheLayer.id))){
+                    if(other2 != null && (glowLiquidFloors.contains(other2.floor().cacheLayer.id))){
                         shouldAdd = true;
                         break scan;
                     }
@@ -236,6 +250,12 @@ public class AdvanceLighting extends Mod{
                 }
                 return s + "%";
             });
+            st.sliderPref("al-bloom-threshold", 0, 0, 100, s -> {
+                if(bloom != null){
+                    bloom.threshold = s / 100f;
+                }
+                return s + "%";
+            });
             st.sliderPref("al-bloom-blur-amount", 2, 0, 25, s -> {
                 if(bloom != null){
                     bloom.blurPasses = s;
@@ -281,6 +301,7 @@ public class AdvanceLighting extends Mod{
             bloom.flarePasses = Core.settings.getInt("al-bloom-flare-amount", 3);
             bloom.intensity = Core.settings.getInt("al-bloom-intensity", 75) / 100f;
             bloom.flareLength = Core.settings.getInt("al-bloom-flare-length", 30) / 10f;
+            bloom.threshold = Core.settings.getInt("al-bloom-threshold", 0) / 100f;
 
             bloom.setBlurFeedBack(Core.settings.getInt("al-bloom-blur-feedback", 100) / 100f);
             bloom.setFlareFeedBack(Core.settings.getInt("al-bloom-flare-feedback", 100) / 100f);
@@ -429,6 +450,13 @@ public class AdvanceLighting extends Mod{
         TextureRegion[] tmpVariants = new TextureRegion[16];
         int tmpVariantsSize;
 
+        for(Liquid liquid : Vars.content.liquids()){
+            if(liquid.lightColor.a >= 0.1f){
+                glowingLiquidColors.put(ALStructs.rgb(liquid.color), Mathf.clamp(liquid.lightColor.a / 0.4f));
+                glowingLiquids.add(liquid.id);
+            }
+        }
+
         for(Block block : Vars.content.blocks()){
             boolean found = false;
 
@@ -520,6 +548,15 @@ public class AdvanceLighting extends Mod{
 
             if(test) block.lightRadius = 0f;
 
+            if(block instanceof LiquidBlock lb){
+                /*
+                if(lb.liquidRegion != null && lb.liquidRegion.found()){
+                    liquidBlocks.add(block.id);
+                }
+                 */
+                liquidBlocks.add(block.id);
+            }
+
             TextureRegion tmr;
             if(!(block instanceof Turret) && (tmr = get(block.name)).found()){
                 glowEquiv.put(block.region, tmr);
@@ -568,7 +605,7 @@ public class AdvanceLighting extends Mod{
             }
             if(block instanceof PowerNode pn){
                 autoGlowRegions.add(pn.laserEnd);
-                uvAutoGlowRegions.add(UVStruct.uv(pn.laser.texture, pn.laser.u, pn.laser.v));
+                uvAutoGlowRegions.add(ALStructs.uv(pn.laser.texture, pn.laser.u, pn.laser.v));
             }
 
             /*
@@ -587,7 +624,7 @@ public class AdvanceLighting extends Mod{
 
         autoGlowRegions.add(Core.atlas.find("minelaser-end"));
         TextureRegion mineLaser = Core.atlas.find("minelaser");
-        uvAutoGlowRegions.add(UVStruct.uv(mineLaser.texture, mineLaser.u, mineLaser.v));
+        uvAutoGlowRegions.add(ALStructs.uv(mineLaser.texture, mineLaser.u, mineLaser.v));
 
         for(UnitType unit : Vars.content.units()){
             if(unit.internal) continue;
@@ -606,13 +643,13 @@ public class AdvanceLighting extends Mod{
                 if(rl1 instanceof AtlasRegion rla1){
                     if((r = get(rla1.name)).found()){
                         //glowEquiv.put(rl1, r);
-                        uvGlowRegions.put(UVStruct.uv(rl1.texture, rl1.u, rl1.v), r);
+                        uvGlowRegions.put(ALStructs.uv(rl1.texture, rl1.u, rl1.v), r);
                     }
                 }
                 if(rl2 instanceof AtlasRegion rla2){
                     if((r = get(rla2.name)).found()){
                         //glowEquiv.put(rl2, r);
-                        uvGlowRegions.put(UVStruct.uv(rl2.texture, rl2.u, rl2.v), r);
+                        uvGlowRegions.put(ALStructs.uv(rl2.texture, rl2.u, rl2.v), r);
                     }
                 }
             }
@@ -648,10 +685,10 @@ public class AdvanceLighting extends Mod{
                 }
                 if(w instanceof RepairBeamWeapon rw){
                     autoGlowRegions.add(rw.laserEnd);
-                    uvAutoGlowRegions.add(UVStruct.uv(rw.laser.texture, rw.laser.u, rw.laser.v));
+                    uvAutoGlowRegions.add(ALStructs.uv(rw.laser.texture, rw.laser.u, rw.laser.v));
 
                     autoGlowRegions.add(rw.laserTopEnd);
-                    uvAutoGlowRegions.add(UVStruct.uv(rw.laserTop.texture, rw.laserTop.u, rw.laserTop.v));
+                    uvAutoGlowRegions.add(ALStructs.uv(rw.laserTop.texture, rw.laserTop.u, rw.laserTop.v));
                 }
             }
 
@@ -676,13 +713,18 @@ public class AdvanceLighting extends Mod{
             boolean visible = (build == null || !build.inFogTo(pteam));
 
             if(block != Blocks.air && (visible || build.wasVisible)){
-                boolean valid = validBlocks.contains(block.id) || onGlowingTile.contains(tile.pos());
+                Liquid lc;
+                boolean setLiquid = (build != null && liquidBlocks.contains(block.id) && ((lc = build.liquids.current()) != null && build.liquids.currentAmount() > 0.001f && glowingLiquids.contains(lc.id)));
+                boolean valid = validBlocks.contains(block.id) || onGlowingTile.contains(tile.pos()) || setLiquid;
 
                 batch.setExcludeLayer(-100f, valid ? -100f : Layer.blockAfterCracks);
 
+                if(setLiquid) batch.setLiquidMode(true);
                 block.drawBase(tile);
                 Draw.reset();
                 Draw.z(Layer.block);
+
+                if(setLiquid) batch.setLiquidMode(false);
 
                 if(build != null){
                     if(build.damaged()){

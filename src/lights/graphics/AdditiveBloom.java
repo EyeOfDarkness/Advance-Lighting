@@ -12,7 +12,7 @@ import mindustry.*;
 
 public class AdditiveBloom{
     public int blurPasses = 2, flarePasses = 3;
-    public float intensity = 0.75f, flareLength = 3f;
+    public float intensity = 0.75f, threshold = 0f, flareLength = 3f;
     public float blurFeedBack = 1f, flareFeedBack = 1f;
     private FrameBuffer pingPong1, pingPong2, pingPong3;
     private Shader blurShader, renderShader;
@@ -56,6 +56,8 @@ public class AdditiveBloom{
 
         pingPong1.begin(Color.black);
         //Draw.blit(texture, AdvanceLighting.screenShader);
+        renderShader.bind();
+        renderShader.setUniformf("u_threshold", threshold);
         Draw.blit(texture, renderShader);
         pingPong1.end();
 
@@ -103,6 +105,8 @@ public class AdditiveBloom{
 
         //Gl.enable(Gl.blend);
         Blending.additive.apply();
+        renderShader.bind();
+        renderShader.setUniformf("u_threshold", 0f);
         pingPong1.blit(renderShader);
         if(flarePasses > 0){
             pingPong3.blit(renderShader);
@@ -141,6 +145,7 @@ public class AdditiveBloom{
                 uniform sampler2D u_texture;
                 
                 uniform float u_intensity;
+                uniform float u_threshold;
                 
                 varying vec2 v_texCoords;
                 const float sat = 12.0;
@@ -149,10 +154,24 @@ public class AdditiveBloom{
                     vec4 v = texture2D(u_texture, v_texCoords);
                     vec3 tvc = mix(vec3(0.0, 0.0, 0.0), v.rgb, v.a);
                     
+                    if(u_threshold > 0.0){
+                        float ff = u_threshold;
+                        tvc.r = max(0.0, (tvc.r - ff) / (1.0 - ff));
+                        tvc.g = max(0.0, (tvc.g - ff) / (1.0 - ff));
+                        tvc.b = max(0.0, (tvc.b - ff) / (1.0 - ff));
+                        //float vrt = -min(((tvc.r + tvc.g + tvc.b) / 3.0) - u_threshold, 0.0);
+                        
+                        //tvc.r = max(0.0, min(1.0, (tvc.r - vrt) / (1.0 - vrt)));
+                        //tvc.g = max(0.0, min(1.0, (tvc.g - vrt) / (1.0 - vrt)));
+                        //tvc.b = max(0.0, min(1.0, (tvc.b - vrt) / (1.0 - vrt)));
+                    }
+                    
                     //float asat = sat * 0.25 + 1.0;
                     
-                    float mx = max(v.r, max(v.g, v.b));
-                    float mn = min(v.r, min(v.g, v.b));
+                    //float mx = max(v.r, max(v.g, v.b));
+                    //float mn = min(v.r, min(v.g, v.b));
+                    float mx = max(tvc.r, max(tvc.g, tvc.b));
+                    float mn = min(tvc.r, min(tvc.g, tvc.b));
                     
                     float power = (mx - mn) * sat;
                     //float power2 = power * 0.25 + 0.75;
