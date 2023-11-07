@@ -3,8 +3,10 @@
     "displayName": "Advance lighting",
     "author": "EoD",
     "description": "Not recommended for weak devices. Only supports Vanilla/Supported-Json content. This mod replaces/add some effects, and may cause issues with mods that actively check on those effects. May conflict with vanilla bloom.",
-    "version": "v1.1.1",
+    "version": "v1.1.2",
     "minGameVersion": 145,
     "main": "lights.AdvanceLighting",
+    "repo": "EyeOfDarkness/Advance-Lighting",
+    "hidden": true,
     "java": true
 }
