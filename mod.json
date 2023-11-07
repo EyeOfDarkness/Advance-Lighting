@@ -6,7 +6,6 @@
     "version": "v1.1.2",
     "minGameVersion": 145,
     "main": "lights.AdvanceLighting",
-    "repo": "EyeOfDarkness/Advance-Lighting",
     "hidden": true,
     "java": true
 }
