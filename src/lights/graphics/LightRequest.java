@@ -31,8 +31,8 @@ public class LightRequest implements Comparable<LightRequest>{
         //tc.mul(light);
 
         //float lum = Math.max((((tc.r + tc.g + tc.b) / 3f) - 0.7f) / 0.3f, 0f);
-        float lum = Mathf.curve((tc.r + tc.g + tc.b) / 3f, 0.6f, 0.8f);
-        float sat = Mathf.curve(Math.max(tc.r, Math.max(tc.g, tc.b)) - Math.min(tc.r, Math.min(tc.g, tc.b)), 0.2f, 0.4f);
+        float lum = Mathf.curve((tc.r + tc.g + tc.b) / 3f, 0.65f, 0.85f);
+        float sat = Mathf.curve(Math.max(tc.r, Math.max(tc.g, tc.b)) - Math.min(tc.r, Math.min(tc.g, tc.b)), 0.15f, 0.4f);
         //float sat = Mathf.clamp(Math.max((((Math.max(tc.r, Math.max(tc.g, tc.b)) - Math.min(tc.r, Math.min(tc.g, tc.b))) - 0.5f) / 0.5f) * 1.2f, 0f) + lum);
         float v = Mathf.clamp(sat + lum);
         //tc.mul(sat);

@@ -128,7 +128,7 @@ public class AltLightBatch extends SpriteBatch{
 
             colorPacked = c;
         }
-        if(flushing || calls >= maxRequests || invalid() || glowAlpha <= 0f) return;
+        if(flushing || calls >= maxRequests || invalid() || (glowAlpha <= 0f && !glow && !liquidMode)) return;
 
         LightRequest rq = obtain();
         float[] vertices = rq.vertices;
@@ -278,7 +278,7 @@ public class AltLightBatch extends SpriteBatch{
             }
             superDraw(texture, tmp, 24);
         }
-        if(flushing || calls >= maxRequests || invalid() || glowAlpha <= 0f) return;
+        if(flushing || calls >= maxRequests || invalid() || (glowAlpha <= 0f && !glow)) return;
 
         LightRequest rq = obtain();
         rq.texture = texture;
