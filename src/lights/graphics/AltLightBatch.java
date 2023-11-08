@@ -16,6 +16,7 @@ public class AltLightBatch extends SpriteBatch{
     boolean flushing;
     boolean auto, layerGlow;
     boolean liquidMode = false;
+    float liquidGlow = -1f;
 
     boolean glow = false;
     boolean glowTexture = false;
@@ -39,6 +40,9 @@ public class AltLightBatch extends SpriteBatch{
         }
     }
 
+    public void setLiquidGlow(float amount){
+        liquidGlow = amount;
+    }
     public void setLiquidMode(boolean liq){
         liquidMode = liq;
     }
@@ -137,7 +141,7 @@ public class AltLightBatch extends SpriteBatch{
         float mixColor = this.mixColorPacked;
 
         if(liquidMode && !glow){
-            float v = AdvanceLighting.glowingLiquidColorsFunc.get(this.color);
+            float v = liquidGlow < 0 ? AdvanceLighting.glowingLiquidColorsFunc.get(this.color) : liquidGlow;
             tmpColor.set(blackAlpha).lerp(this.color, v);
             color = tmpColor.toFloatBits();
         }

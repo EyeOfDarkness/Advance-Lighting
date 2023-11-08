@@ -37,7 +37,6 @@ import java.lang.reflect.*;
 public class AdvanceLighting extends Mod{
     public static AltLightBatch batch;
     public static ObjectMap<TextureRegion, TextureRegion> glowEquiv = new ObjectMap<>();
-    public static ObjectMap<TextureRegion, Floatf<Color>> conditionalGlow = new ObjectMap<>();
     public static ObjectSet<TextureRegion> autoGlowRegions = new ObjectSet<>();
     public static IntMap<TextureRegion> uvGlowRegions = new IntMap<>();
     public static IntMap<EnviroGlow> glowingEnvTiles = new IntMap<>();
@@ -49,6 +48,7 @@ public class AdvanceLighting extends Mod{
     static Seq<TextureRegion> tmpRegions = new Seq<>(2);
 
     static Seq<Tile> tileView;
+    static Rect view = new Rect();
 
     static int bloomQuality = 4;
     static boolean hideVanillaLights = false, renderEnvironment = true;
@@ -548,12 +548,7 @@ public class AdvanceLighting extends Mod{
 
             if(test) block.lightRadius = 0f;
 
-            if(block instanceof LiquidBlock lb){
-                /*
-                if(lb.liquidRegion != null && lb.liquidRegion.found()){
-                    liquidBlocks.add(block.id);
-                }
-                 */
+            if(block instanceof LiquidBlock){
                 liquidBlocks.add(block.id);
             }
 
@@ -826,6 +821,22 @@ public class AdvanceLighting extends Mod{
             drawTiles();
         }
         Groups.draw.draw(Drawc::draw);
+        //Redraws puddles, in hopes it doesn't slowdown regular draw with 'instanceof' that only contains 1% puddles
+        Core.camera.bounds(view);
+        for(Puddle p : Groups.puddle){
+            if(p.liquid != null && glowingLiquids.contains(p.liquid.id)){
+                float size = p.clipSize();
+                //batch.setGlow(true);
+                batch.setLiquidMode(true);
+                batch.setLiquidGlow(p.liquid.lightColor.a / 0.4f);
+                if(view.overlaps(p.x - size/2f, p.y - size/2f, size, size)){
+                    p.draw();
+                }
+                //batch.setGlow(false);
+                batch.setLiquidMode(false);
+                batch.setLiquidGlow(-1f);
+            }
+        }
 
         Vars.state.rules.lighting = light;
 
