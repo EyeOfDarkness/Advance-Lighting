@@ -140,7 +140,7 @@ public class AltLightBatch extends SpriteBatch{
         float color = (glow || AdvanceLighting.autoGlowRegions.contains(region)) ? this.colorPacked : blackAlphaBits;
         float mixColor = this.mixColorPacked;
 
-        if(liquidMode && !glow){
+        if(!glow && (liquidMode || AdvanceLighting.liquidRegions.contains(region))){
             float v = liquidGlow < 0 ? AdvanceLighting.glowingLiquidColorsFunc.get(this.color) : liquidGlow;
             tmpColor.set(blackAlpha).lerp(this.color, v);
             color = tmpColor.toFloatBits();

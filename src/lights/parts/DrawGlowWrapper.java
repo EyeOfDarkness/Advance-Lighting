@@ -13,6 +13,7 @@ import mindustry.world.blocks.production.*;
 import mindustry.world.draw.*;
 
 public class DrawGlowWrapper extends DrawBlock{
+    public boolean liquid;
     DrawBlock source;
 
     public DrawGlowWrapper(DrawBlock source){
@@ -30,9 +31,15 @@ public class DrawGlowWrapper extends DrawBlock{
         if(Core.batch == AdvanceLighting.batch){
             AltLightBatch b = AdvanceLighting.batch;
 
-            b.setGlow(true);
-            source.draw(build);
-            b.setGlow(false);
+            if(!liquid){
+                b.setGlow(true);
+                source.draw(build);
+                b.setGlow(false);
+            }else{
+                b.setLiquidMode(true);
+                source.draw(build);
+                b.setLiquidMode(false);
+            }
         }else{
             source.draw(build);
         }

@@ -38,7 +38,7 @@ import java.lang.reflect.*;
 public class AdvanceLighting extends Mod{
     public static AltLightBatch batch;
     public static ObjectMap<TextureRegion, TextureRegion> glowEquiv = new ObjectMap<>();
-    public static ObjectSet<TextureRegion> autoGlowRegions = new ObjectSet<>();
+    public static ObjectSet<TextureRegion> autoGlowRegions = new ObjectSet<>(), liquidRegions = new ObjectSet<>();
     public static IntMap<TextureRegion> uvGlowRegions = new IntMap<>();
     public static IntMap<EnviroGlow> glowingEnvTiles = new IntMap<>();
     public static IntSet uvAutoGlowRegions = new IntSet(), validBlocks = new IntSet();
@@ -431,14 +431,19 @@ public class AdvanceLighting extends Mod{
         for(int i = 0; i < size; i++){
             DrawBlock d = draws[i];
             if(drawOverride(d)){
-                draws[i] = new DrawGlowWrapper(d);
+                DrawGlowWrapper ndw = new DrawGlowWrapper(d);
+                ndw.liquid = drawBlockLiquid(d);
+                draws[i] = ndw;
                 found = true;
             }
         }
         return found;
     }
     boolean drawOverride(DrawBlock draw){
-        return (draw instanceof DrawCrucibleFlame || draw instanceof DrawWeave || draw instanceof DrawSpikes || draw instanceof DrawShape || draw instanceof DrawFlame || draw instanceof DrawPulseShape || draw instanceof DrawArcSmelt);
+        return (draw instanceof DrawCrucibleFlame || draw instanceof DrawWeave || draw instanceof DrawSpikes || draw instanceof DrawShape || draw instanceof DrawFlame || draw instanceof DrawPulseShape || draw instanceof DrawArcSmelt) || drawBlockLiquid(draw);
+    }
+    boolean drawBlockLiquid(DrawBlock draw){
+        return draw instanceof DrawLiquidRegion || draw instanceof DrawLiquidOutputs || draw instanceof DrawLiquidTile;
     }
 
     void load(){
@@ -567,6 +572,9 @@ public class AdvanceLighting extends Mod{
                     glowEquiv.put(block.region, r);
                     //found = true;
                 }
+                if(dtr.liquid.found()){
+                    liquidRegions.add(dtr.liquid);
+                }
 
                 loadParts(dtr.parts, block.name);
 
@@ -588,6 +596,14 @@ public class AdvanceLighting extends Mod{
 
                 if(drawOverride(gc.drawer)){
                     gc.drawer = new DrawGlowWrapper(gc.drawer);
+                    found = true;
+                }
+            }
+            if(block instanceof Separator sr){
+                found = loadDraws(sr.drawer);
+                
+                if(drawOverride(sr.drawer)){
+                    sr.drawer = new DrawGlowWrapper(sr.drawer);
                     found = true;
                 }
             }
