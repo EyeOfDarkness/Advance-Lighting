@@ -15,6 +15,7 @@ import lights.graphics.StaticBlockRenderer.*;
 import lights.parts.*;
 import mindustry.*;
 import mindustry.content.*;
+import mindustry.core.*;
 import mindustry.entities.part.*;
 import mindustry.entities.part.DrawPart.*;
 import mindustry.game.*;
@@ -699,6 +700,10 @@ public class AdvanceLighting extends Mod{
 
     void drawTiles(){
         Team pteam = Vars.player.team();
+        
+        float bridge = Renderer.bridgeOpacity;
+        Renderer.bridgeOpacity = 0.7f + (bridge * (1f - 0.7f));
+        
         for(Tile tile : tileView){
             Block block = tile.block();
             Building build = tile.build;
@@ -731,6 +736,7 @@ public class AdvanceLighting extends Mod{
             }
         }
         batch.setExcludeLayer();
+        Renderer.bridgeOpacity = bridge;
     }
 
     void draw(){
