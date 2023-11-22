@@ -31,6 +31,7 @@ import mindustry.world.blocks.environment.*;
 import mindustry.world.blocks.liquid.*;
 import mindustry.world.blocks.power.*;
 import mindustry.world.blocks.production.*;
+import mindustry.world.blocks.sandbox.*;
 import mindustry.world.draw.*;
 
 import java.lang.reflect.*;
@@ -554,7 +555,7 @@ public class AdvanceLighting extends Mod{
 
             if(test) block.lightRadius = 0f;
 
-            if(block instanceof LiquidBlock){
+            if(block instanceof LiquidBlock || block instanceof LiquidSource){
                 liquidBlocks.add(block.id);
             }
 
