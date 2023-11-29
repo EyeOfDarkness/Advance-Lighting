@@ -555,7 +555,7 @@ public class AdvanceLighting extends Mod{
 
             if(test) block.lightRadius = 0f;
 
-            if(block instanceof LiquidBlock || block instanceof LiquidSource){
+            if(block instanceof LiquidBlock || block instanceof LiquidSource || block instanceof NuclearReactor){
                 liquidBlocks.add(block.id);
             }
 
