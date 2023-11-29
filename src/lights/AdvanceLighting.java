@@ -851,7 +851,7 @@ public class AdvanceLighting extends Mod{
                 float size = p.clipSize();
                 //batch.setGlow(true);
                 batch.setLiquidMode(true);
-                batch.setLiquidGlow(p.liquid.lightColor.a / 0.4f);
+                batch.setLiquidGlow(Mathf.clamp(p.liquid.lightColor.a / 0.4f));
                 if(view.overlaps(p.x - size/2f, p.y - size/2f, size, size)){
                     p.draw();
                 }
