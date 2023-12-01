@@ -487,7 +487,7 @@ public class AltLightBatch extends SpriteBatch{
     }
 
     CacheRequest obtainCache(){
-        if(cacheCalls > cacheRequests.size){
+        if(cacheCalls >= cacheRequests.size){
             CacheRequest cr = new CacheRequest();
             cacheRequests.add(cr);
             cacheCalls++;
