@@ -38,7 +38,7 @@ import java.lang.reflect.*;
 
 public class AdvanceLighting extends Mod{
     public static AltLightBatch batch;
-    public static ObjectMap<TextureRegion, TextureRegion> glowEquiv = new ObjectMap<>();
+    public static ObjectMap<TextureRegion, TextureRegion> glowEquiv = new ObjectMap<>(), replace = new ObjectMap<>();
     public static ObjectSet<TextureRegion> autoGlowRegions = new ObjectSet<>(), liquidRegions = new ObjectSet<>();
     public static IntMap<TextureRegion> uvGlowRegions = new IntMap<>();
     public static IntMap<EnviroGlow> glowingEnvTiles = new IntMap<>();
@@ -55,7 +55,6 @@ public class AdvanceLighting extends Mod{
     static int bloomQuality = 4;
     static boolean hideVanillaLights = false, renderEnvironment = true;
     static boolean test = false;
-    static IntSet onGlowingTile = new IntSet();
     static StaticBlockRenderer staticRenderer;
     public static IntFloatMap glowingLiquidColors = new IntFloatMap();
     public static IntSet glowLiquidFloors = IntSet.with(CacheLayer.slag.id, CacheLayer.cryofluid.id, CacheLayer.space.id),
@@ -138,69 +137,15 @@ public class AdvanceLighting extends Mod{
                 loadTileView();
             });
         });
-        Events.on(ResetEvent.class, e -> {
-            onGlowingTile.clear();
-        });
-        Events.on(TileChangeEvent.class, e -> {
-            Tile tile = e.tile;
-            handleLiquidTile(tile);
-        });
-        Events.on(TilePreChangeEvent.class, e -> {
-            onGlowingTile.remove(e.tile.pos());
-        });
         Events.on(WorldLoadEvent.class, e -> {
             if(renderEnvironment){
                 staticRenderer.begin();
                 for(Tile tile : Vars.world.tiles){
-                    handleLiquidTile(tile);
                     staticRenderer.handleTile(tile);
                 }
                 staticRenderer.end();
             }
         });
-    }
-
-    void handleLiquidTile(Tile tile){
-        if(!renderEnvironment) return;
-
-        if(glowLiquidFloors.contains(tile.floor().cacheLayer.id) && tile.block().isAir()){
-            onGlowingTile.remove(tile.pos());
-        }
-        Block block = tile.block();
-        if(block == Blocks.air || block.isStatic()) return;
-
-        int offset = -(block.size - 1) / 2;
-
-        //boolean shouldAdd = glowLiquid.contains(tile.floor().cacheLayer.id);
-        boolean shouldAdd = false;
-
-        scan:
-        for(int dx = 0; dx < block.size; dx++){
-            for(int dy = 0; dy < block.size; dy++){
-                int worldx = dx + offset + tile.x;
-                int worldy = dy + offset + tile.y;
-
-                Tile other1 = Vars.world.tile(worldx, worldy);
-                if(other1 != null && (glowLiquidFloors.contains(other1.floor().cacheLayer.id) || (glowingEnvTiles.get(other1.floor().id) != null))){
-                    shouldAdd = true;
-                    break scan;
-                }
-
-                //inefficient
-                for(Point2 d : Geometry.d8){
-                    int ox = worldx + d.x, oy = worldy + d.y;
-
-                    Tile other2 = Vars.world.tile(ox, oy);
-                    if(other2 != null && (glowLiquidFloors.contains(other2.floor().cacheLayer.id))){
-                        shouldAdd = true;
-                        break scan;
-                    }
-                }
-            }
-        }
-        if(shouldAdd){
-            onGlowingTile.add(tile.pos());
-        }
     }
 
     @SuppressWarnings("unchecked")
@@ -313,6 +258,11 @@ public class AdvanceLighting extends Mod{
 
     TextureRegion get(String name){
         return Core.atlas.find(name + "-advance-light", Core.atlas.find("advance-lighting-" + name));
+    }
+
+    TextureRegion getReplace(String name){
+        //replace
+        return Core.atlas.find(name + "-advance-light-replace", Core.atlas.find("advance-lighting-" + name + "-replace"));
     }
 
     Seq<TextureRegion> getHeat(String name){
@@ -555,6 +505,20 @@ public class AdvanceLighting extends Mod{
 
             if(test) block.lightRadius = 0f;
 
+            TextureRegion rep;
+            if((rep = getReplace(block.name)).found()){
+                replace.put(block.region, rep);
+            }
+            if(block instanceof Conduit con){
+                for(TextureRegion top : con.topRegions){
+                    if(top instanceof AtlasRegion ar){
+                        if((rep = getReplace(ar.name)).found()){
+                            replace.put(ar, rep);
+                        }
+                    }
+                }
+            }
+
             if(block instanceof LiquidBlock || block instanceof LiquidSource || block instanceof NuclearReactor){
                 liquidBlocks.add(block.id);
             }
@@ -620,6 +584,7 @@ public class AdvanceLighting extends Mod{
                 autoGlowRegions.add(pn.laserEnd);
                 uvAutoGlowRegions.add(ALStructs.uv(pn.laser.texture, pn.laser.u, pn.laser.v));
             }
+            if(block instanceof LightBlock) found = true;
 
             /*
             if(block instanceof HeatConductor || block instanceof HeatProducer || block instanceof PowerBlock){
@@ -720,7 +685,8 @@ public class AdvanceLighting extends Mod{
         
         float bridge = Renderer.bridgeOpacity;
         Renderer.bridgeOpacity = 0.7f + (bridge * (1f - 0.7f));
-        
+
+        batch.cacheMode = true;
         for(Tile tile : tileView){
             Block block = tile.block();
             Building build = tile.build;
@@ -732,7 +698,8 @@ public class AdvanceLighting extends Mod{
             if(block != Blocks.air && (visible || build.wasVisible)){
                 Liquid lc;
                 boolean setLiquid = (build != null && liquidBlocks.contains(block.id) && ((lc = build.liquids.current()) != null && build.liquids.currentAmount() > 0.001f && glowingLiquids.contains(lc.id)));
-                boolean valid = validBlocks.contains(block.id) || onGlowingTile.contains(tile.pos()) || setLiquid;
+                //boolean valid = validBlocks.contains(block.id) || onGlowingTile.contains(tile.pos()) || setLiquid;
+                boolean valid = validBlocks.contains(block.id) || setLiquid;
 
                 batch.setExcludeLayer(-100f, valid ? -100f : Layer.blockAfterCracks);
 
@@ -752,6 +719,7 @@ public class AdvanceLighting extends Mod{
                 }
             }
         }
+        batch.cacheMode = false;
         batch.setExcludeLayer();
         Renderer.bridgeOpacity = bridge;
     }

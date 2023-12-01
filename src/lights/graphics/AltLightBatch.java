@@ -6,13 +6,20 @@ import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.graphics.gl.*;
 import arc.math.*;
+import arc.math.geom.*;
 import arc.struct.*;
+import arc.util.*;
 import lights.*;
+import mindustry.graphics.*;
+
+import java.util.*;
 
 public class AltLightBatch extends SpriteBatch{
-    Seq<LightRequest> requests = new Seq<>(maxRequests);
+    Seq<LightRequest> requests = new Seq<>(true, maxRequests, LightRequest.class);
+    Seq<CacheRequest> cacheRequests = new Seq<>(false, 2048, CacheRequest.class);
     FloatSeq uncapture = new FloatSeq();
     int calls = 0;
+    int cacheCalls = 0;
     boolean flushing;
     boolean auto, layerGlow;
     boolean liquidMode = false;
@@ -24,11 +31,14 @@ public class AltLightBatch extends SpriteBatch{
     Color blackAlpha = new Color();
     float blackAlphaBits = Color.blackFloatBits;
 
+    public boolean cacheMode = false;
+    public float cacheLayer = Layer.blockUnder;
+
     float excludeMinZ, excludeMaxZ;
 
     Batch lastBatch;
 
-    final static int maxRequests = 2048;
+    final static int maxRequests = 4096;
     final static float[] tmpVert = new float[24];
     final static Color tmpColor = new Color();
 
@@ -37,6 +47,10 @@ public class AltLightBatch extends SpriteBatch{
 
         for(int i = 0; i < maxRequests; i++){
             requests.add(new LightRequest());
+        }
+        for(int i = 0; i < 2048; i++){
+            //cacheRequests
+            cacheRequests.add(new CacheRequest());
         }
     }
 
@@ -131,8 +145,13 @@ public class AltLightBatch extends SpriteBatch{
             super.draw(region, x, y, originX, originY, width, height, rotation);
 
             colorPacked = c;
+            return;
         }
-        if(flushing || calls >= maxRequests || invalid() || (glowAlpha <= 0f && !glow && !liquidMode)) return;
+        if(cacheMode && color.a >= 0.999f && z >= excludeMinZ && z <= excludeMaxZ){
+            CacheRequest cr = obtainCache();
+            cr.set(region, x, y, originX, originY, width, height, rotation);
+        }
+        if(calls >= maxRequests || invalid() || (glowAlpha <= 0f && !glow && !liquidMode)) return;
 
         LightRequest rq = obtain();
         float[] vertices = rq.vertices;
@@ -144,6 +163,11 @@ public class AltLightBatch extends SpriteBatch{
             float v = liquidGlow < 0 ? AdvanceLighting.glowingLiquidColorsFunc.get(this.color) : liquidGlow;
             tmpColor.set(blackAlpha).lerp(this.color, v);
             color = tmpColor.toFloatBits();
+        }
+
+        TextureRegion rep;
+        if((rep = AdvanceLighting.replace.get(region)) != null){
+            region = rep;
         }
 
         rq.texture = region.texture;
@@ -281,8 +305,9 @@ public class AltLightBatch extends SpriteBatch{
                 tmp[i] = color;
             }
             superDraw(texture, tmp, 24);
+            return;
         }
-        if(flushing || calls >= maxRequests || invalid() || (glowAlpha <= 0f && !glow)) return;
+        if(calls >= maxRequests || invalid() || (glowAlpha <= 0f && !glow)) return;
 
         LightRequest rq = obtain();
         rq.texture = texture;
@@ -350,10 +375,24 @@ public class AltLightBatch extends SpriteBatch{
     @Override
     protected void flush(){
         if(!flushing){
+            if(cacheCalls > 0){
+                Draw.draw(cacheLayer, () -> {
+                    for(int i = 0; i < cacheCalls; i++){
+                        CacheRequest cr = cacheRequests.items[i];
+                        //draw(cr.texture, cr.vertices, 0, 24);
+                        superDraw(cr.texture, cr.vertices, 24);
+                    }
+                    cacheCalls = 0;
+                });
+            }
+
             flushing = true;
+
+            sortRequests();
+
             int size = requests.size;
             requests.size = calls;
-            requests.sort();
+            //requests.sort();
 
             for(LightRequest r : requests){
                 if(r.texture != null){
@@ -447,6 +486,19 @@ public class AltLightBatch extends SpriteBatch{
         return r;
     }
 
+    CacheRequest obtainCache(){
+        if(cacheCalls > cacheRequests.size){
+            CacheRequest cr = new CacheRequest();
+            cacheRequests.add(cr);
+            cacheCalls++;
+            return cr;
+        }
+
+        CacheRequest cr = cacheRequests.get(cacheCalls);
+        cacheCalls++;
+        return cr;
+    }
+
     static Shader createShaderL(){
         return new Shader("""
                 attribute vec4 a_position;
@@ -499,5 +551,122 @@ public class AltLightBatch extends SpriteBatch{
                     gl_FragColor = vec4(mix(c.rgb, v_mix_color.rgb, v_mix_color.a) * v_color.rgb, alpha);
                 }
                 """);
+    }
+
+    LightRequest[] copy = new LightRequest[0];
+    int[] contiguous = new int[2048], contiguousCopy = new int[2048];
+    void sortRequests(){
+        final int numRequests = calls;
+        if(copy.length < numRequests) copy = new LightRequest[numRequests + (numRequests >> 3)];
+        final LightRequest[] items = copy;
+        final LightRequest[] itemR = requests.items;
+        System.arraycopy(requests.items, 0, items, 0, numRequests);
+        int[] contiguous = this.contiguous;
+        int ci = 0, cl = contiguous.length;
+        float z = requests.items[0].z;
+        int startI = 0;
+
+        for(int i = 1; i < numRequests; i++){
+            if(itemR[i] == null) break;
+            if(itemR[i].z != z){
+                contiguous[ci] = Float.floatToRawIntBits(z + 16f);
+                contiguous[ci + 1] = startI;
+                contiguous[ci + 2] = i - startI;
+                ci += 3;
+                if(ci + 3 > cl){
+                    contiguous = Arrays.copyOf(contiguous, cl <<= 1);
+                }
+                //z = itemZ[startI = i];
+                z = (itemR[startI = i].z);
+            }
+        }
+        contiguous[ci] = Float.floatToRawIntBits(z + 16f);
+        contiguous[ci + 1] = startI;
+        contiguous[ci + 2] = numRequests - startI;
+        this.contiguous = contiguous;
+
+        final int L = (ci / 3) + 1;
+
+        if(contiguousCopy.length < contiguous.length) contiguousCopy = new int[contiguous.length];
+
+        final int[] sorted = BasicCountingSort.countingSortMap(contiguous, contiguousCopy, L);
+
+        int ptr = 0;
+        final LightRequest[] dest = requests.items;
+        for(int i = 0; i < L * 3; i += 3){
+            final int pos = sorted[i + 1], length = sorted[i + 2];
+            if(length < 10){
+                final int end = pos + length;
+                for(int sj = pos, dj = ptr; sj < end; sj++, dj++){
+                    dest[dj] = items[sj];
+                }
+            }else System.arraycopy(items, pos, dest, ptr, Math.min(length, dest.length - ptr));
+            ptr += length;
+        }
+    }
+
+    static class BasicCountingSort{
+        static int[] locs = new int[100];
+        static final IntIntMap counts = new IntIntMap();
+        private static Point2[] entries = new Point2[100];
+
+        static{
+            for(int i = 0; i < entries.length; i++) entries[i] = new Point2();
+        }
+
+        static int[] countingSortMap(final int[] arr, final int[] swap, final int end){
+            //int[] locs = CountingSort.locs;
+            int[] locs = BasicCountingSort.locs;
+            final IntIntMap counts = BasicCountingSort.counts;
+            counts.clear();
+
+            int unique = 0;
+            final int end3 = end * 3;
+            for(int i = 0; i < end3; i += 3){
+                int loc = counts.getOrPut(arr[i], unique);
+                arr[i] = loc;
+                if(loc == unique){
+                    if(unique >= locs.length){
+                        locs = Arrays.copyOf(locs, unique * 3 / 2);
+                    }
+                    locs[unique++] = 1;
+                }else{
+                    locs[loc]++;
+                }
+            }
+            BasicCountingSort.locs = locs;
+
+            if(entries.length < unique){
+                final int prevLength = entries.length;
+                entries = Arrays.copyOf(entries, unique * 3 / 2);
+                final Point2[] entries = BasicCountingSort.entries;
+                for(int i = prevLength; i < entries.length; i++) entries[i] = new Point2();
+            }
+            final Point2[] entries = BasicCountingSort.entries;
+
+            final IntIntMap.Entries countEntries = counts.entries();
+            final IntIntMap.Entry entry = countEntries.next();
+            entries[0].set(entry.key, entry.value);
+            int j = 1;
+            while(countEntries.hasNext){
+                countEntries.next();
+                entries[j++].set(entry.key, entry.value);
+            }
+            Arrays.sort(entries, 0, unique, Structs.comparingInt(p -> p.x));
+
+            int prev = entries[0].y, next;
+            for(int i = 1; i < unique; i++){
+                locs[next = entries[i].y] += locs[prev];
+                prev = next;
+            }
+            for(int i = end - 1, i3 = i * 3; i >= 0; i--, i3 -= 3){
+                final int destPos = --locs[arr[i3]] * 3;
+                swap[destPos] = arr[i3];
+                swap[destPos + 1] = arr[i3 + 1];
+                swap[destPos + 2] = arr[i3 + 2];
+            }
+
+            return swap;
+        }
     }
 }
