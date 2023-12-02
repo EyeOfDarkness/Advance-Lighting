@@ -1,7 +1,6 @@
 package lights.graphics;
 
 import arc.*;
-import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.graphics.gl.*;
@@ -15,7 +14,7 @@ import mindustry.graphics.*;
 import java.util.*;
 
 public class AltLightBatch extends SpriteBatch{
-    Seq<LightRequest> requests = new Seq<>(true, maxRequests, LightRequest.class);
+    LightRequest[] requests = new LightRequest[maxRequests];
     Seq<CacheRequest> cacheRequests = new Seq<>(false, 2048, CacheRequest.class);
     FloatSeq uncapture = new FloatSeq();
     int calls = 0;
@@ -46,7 +45,8 @@ public class AltLightBatch extends SpriteBatch{
         super(maxRequests, createShaderL());
 
         for(int i = 0; i < maxRequests; i++){
-            requests.add(new LightRequest());
+            //requests.add(new LightRequest());
+            requests[i] = new LightRequest();
         }
         for(int i = 0; i < 2048; i++){
             //cacheRequests
@@ -151,7 +151,7 @@ public class AltLightBatch extends SpriteBatch{
             CacheRequest cr = obtainCache();
             cr.set(region, x, y, originX, originY, width, height, rotation);
         }
-        if(calls >= maxRequests || invalid() || (glowAlpha <= 0f && !glow && !liquidMode)) return;
+        if(invalid() || (glowAlpha <= 0f && !glow && !liquidMode)) return;
 
         LightRequest rq = obtain();
         float[] vertices = rq.vertices;
@@ -299,15 +299,17 @@ public class AltLightBatch extends SpriteBatch{
         */
         if(flushing){
             float[] tmp = tmpVert;
+            System.arraycopy(spriteVertices, offset, tmp, 0, 24);
 
-            float color = glow ? colorPacked : blackAlphaBits;
-            for(int i = 2; i < 24; i += 6){
-                tmp[i] = color;
+            if(!glow){
+                for(int i = 2; i < 24; i += 6){
+                    tmp[i] = blackAlphaBits;
+                }
             }
             superDraw(texture, tmp, 24);
             return;
         }
-        if(calls >= maxRequests || invalid() || (glowAlpha <= 0f && !glow)) return;
+        if(invalid() || (glowAlpha <= 0f && !glow)) return;
 
         LightRequest rq = obtain();
         rq.texture = texture;
@@ -390,11 +392,13 @@ public class AltLightBatch extends SpriteBatch{
 
             sortRequests();
 
-            int size = requests.size;
-            requests.size = calls;
+            //int size = requests.size;
+
             //requests.sort();
 
-            for(LightRequest r : requests){
+            //requests2
+            for(int i = 0; i < calls; i++){
+                LightRequest r = requests[i];
                 if(r.texture != null){
                     if(auto) r.convertAutoColor();
                     if(layerGlow) r.convertGlow();
@@ -411,7 +415,6 @@ public class AltLightBatch extends SpriteBatch{
                     }
                 }
             }
-            requests.size = size;
             super.flush();
             if(blending != Blending.normal){
                 setBlending(Blending.normal);
@@ -468,15 +471,12 @@ public class AltLightBatch extends SpriteBatch{
     }
 
     LightRequest obtain(){
-        if(calls >= requests.size){
-            LightRequest r = new LightRequest();
-            requests.add(r);
-            calls++;
-            return r;
+        if(calls >= requests.length){
+            expandRequests();
         }
         //calls++;
         //requests.size = calls;
-        LightRequest r = requests.get(calls);
+        LightRequest r = requests[calls];
         r.texture = null;
         r.run = null;
         r.action = 0;
@@ -484,6 +484,17 @@ public class AltLightBatch extends SpriteBatch{
         r.blend = Blending.normal;
         calls++;
         return r;
+    }
+
+    void expandRequests(){
+        //final DrawRequest[] requests = this.requests, newRequests = new DrawRequest[requests.length * 7 / 4];
+        //System.arraycopy(requests, 0, newRequests, 0, Math.min(newRequests.length, requests.length));
+        final LightRequest[] requests = this.requests, newRequests = new LightRequest[requests.length * 7 / 4];
+        System.arraycopy(requests, 0, newRequests, 0, Math.min(newRequests.length, requests.length));
+        for(int i = requests.length; i < newRequests.length; i++){
+            newRequests[i] = new LightRequest();
+        }
+        this.requests = newRequests;
     }
 
     CacheRequest obtainCache(){
@@ -559,11 +570,11 @@ public class AltLightBatch extends SpriteBatch{
         final int numRequests = calls;
         if(copy.length < numRequests) copy = new LightRequest[numRequests + (numRequests >> 3)];
         final LightRequest[] items = copy;
-        final LightRequest[] itemR = requests.items;
-        System.arraycopy(requests.items, 0, items, 0, numRequests);
+        final LightRequest[] itemR = requests;
+        System.arraycopy(requests, 0, items, 0, numRequests);
         int[] contiguous = this.contiguous;
         int ci = 0, cl = contiguous.length;
-        float z = requests.items[0].z;
+        float z = requests[0].z;
         int startI = 0;
 
         for(int i = 1; i < numRequests; i++){
@@ -592,7 +603,7 @@ public class AltLightBatch extends SpriteBatch{
         final int[] sorted = BasicCountingSort.countingSortMap(contiguous, contiguousCopy, L);
 
         int ptr = 0;
-        final LightRequest[] dest = requests.items;
+        final LightRequest[] dest = requests;
         for(int i = 0; i < L * 3; i += 3){
             final int pos = sorted[i + 1], length = sorted[i + 2];
             if(length < 10){
