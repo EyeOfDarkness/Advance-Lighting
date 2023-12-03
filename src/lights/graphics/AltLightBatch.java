@@ -147,7 +147,9 @@ public class AltLightBatch extends SpriteBatch{
             colorPacked = c;
             return;
         }
-        if(cacheMode && color.a >= 0.999f && z >= excludeMinZ && z <= excludeMaxZ){
+
+        if(cacheMode && color.a >= 0.999f && !glow && z >= excludeMinZ && z <= excludeMaxZ){
+            //boolean autoGlow = AdvanceLighting.autoGlowRegions.contains(region);
             CacheRequest cr = obtainCache();
             cr.set(region, x, y, originX, originY, width, height, rotation);
         }

@@ -398,11 +398,11 @@ public class AdvanceLighting extends Mod{
     }
 
     void load(){
-        /*
-        for(Texture tex : Core.atlas.getTextures()){
-            Log.info(tex.getTextureObjectHandle());
+        TextureRegion itemCircle = Core.atlas.find("ring-item");
+        if(itemCircle.found()){
+            autoGlowRegions.add(itemCircle);
         }
-        */
+
         EnviroGlow env = new EnviroGlow();
         TextureRegion[] tmpVariants = new TextureRegion[16];
         int tmpVariantsSize;
