@@ -27,6 +27,7 @@ import mindustry.type.*;
 import mindustry.type.weapons.*;
 import mindustry.world.*;
 import mindustry.world.blocks.defense.turrets.*;
+import mindustry.world.blocks.distribution.*;
 import mindustry.world.blocks.environment.*;
 import mindustry.world.blocks.liquid.*;
 import mindustry.world.blocks.power.*;
@@ -42,7 +43,7 @@ public class AdvanceLighting extends Mod{
     public static ObjectSet<TextureRegion> autoGlowRegions = new ObjectSet<>(), liquidRegions = new ObjectSet<>();
     public static IntMap<TextureRegion> uvGlowRegions = new IntMap<>();
     public static IntMap<EnviroGlow> glowingEnvTiles = new IntMap<>();
-    public static IntSet uvAutoGlowRegions = new IntSet(), validBlocks = new IntSet();
+    public static IntSet uvAutoGlowRegions = new IntSet();
     public static Shader screenShader, smoothAlphaCutShader;
     public static AdditiveBloom bloom;
     public static boolean bloomActive;
@@ -399,9 +400,11 @@ public class AdvanceLighting extends Mod{
 
     void load(){
         TextureRegion itemCircle = Core.atlas.find("ring-item");
+        TextureRegion phase = Items.phaseFabric.fullIcon;
         if(itemCircle.found()){
             autoGlowRegions.add(itemCircle);
         }
+        autoGlowRegions.add(phase);
 
         EnviroGlow env = new EnviroGlow();
         TextureRegion[] tmpVariants = new TextureRegion[16];
@@ -415,7 +418,6 @@ public class AdvanceLighting extends Mod{
         }
 
         for(Block block : Vars.content.blocks()){
-            boolean found = false;
 
             if(renderEnvironment){
                 tmpVariantsSize = -1;
@@ -494,10 +496,6 @@ public class AdvanceLighting extends Mod{
                     }
                 }
             }
-            
-            if(block instanceof TreeBlock || block instanceof TallBlock){
-                validBlocks.add(block.id);
-            }
 
             if(!block.hasBuilding()){
                 continue;
@@ -518,6 +516,15 @@ public class AdvanceLighting extends Mod{
                     }
                 }
             }
+            if(block instanceof Duct duc){
+                for(TextureRegion top : duc.topRegions){
+                    if(top instanceof AtlasRegion ar){
+                        if((rep = getReplace(ar.name)).found()){
+                            replace.put(ar, rep);
+                        }
+                    }
+                }
+            }
 
             if(block instanceof LiquidBlock || block instanceof LiquidSource || block instanceof NuclearReactor){
                 liquidBlocks.add(block.id);
@@ -531,11 +538,9 @@ public class AdvanceLighting extends Mod{
             if(block instanceof Turret tr && tr.drawer instanceof DrawTurret dtr){
                 TextureRegion r;
                 Seq<TextureRegion> sr;
-                //Assume all turret parts go outside the block
-                //found = true;
+
                 if(block.region.found() && (r = get(block.name)).found()){
                     glowEquiv.put(block.region, r);
-                    //found = true;
                 }
                 if(dtr.liquid.found()){
                     liquidRegions.add(dtr.liquid);
@@ -557,34 +562,30 @@ public class AdvanceLighting extends Mod{
                 }
             }
             if(block instanceof GenericCrafter gc){
-                found = loadDraws(gc.drawer);
+                loadDraws(gc.drawer);
 
                 if(drawOverride(gc.drawer)){
                     gc.drawer = new DrawGlowWrapper(gc.drawer);
-                    found = true;
                 }
             }
             if(block instanceof Separator sr){
-                found = loadDraws(sr.drawer);
+                loadDraws(sr.drawer);
                 
                 if(drawOverride(sr.drawer)){
                     sr.drawer = new DrawGlowWrapper(sr.drawer);
-                    found = true;
                 }
             }
             if(block instanceof PowerGenerator pg){
-                found = loadDraws(pg.drawer);
+                loadDraws(pg.drawer);
 
                 if(drawOverride(pg.drawer)){
                     pg.drawer = new DrawGlowWrapper(pg.drawer);
-                    found = true;
                 }
             }
             if(block instanceof PowerNode pn){
                 autoGlowRegions.add(pn.laserEnd);
                 uvAutoGlowRegions.add(ALStructs.uv(pn.laser.texture, pn.laser.u, pn.laser.v));
             }
-            if(block instanceof LightBlock) found = true;
 
             /*
             if(block instanceof HeatConductor || block instanceof HeatProducer || block instanceof PowerBlock){
@@ -594,10 +595,6 @@ public class AdvanceLighting extends Mod{
                 found = true;
             }
             */
-
-            if(found){
-                validBlocks.add(block.id);
-            }
         }
 
         autoGlowRegions.add(Core.atlas.find("minelaser-end"));
@@ -686,7 +683,7 @@ public class AdvanceLighting extends Mod{
         float bridge = Renderer.bridgeOpacity;
         Renderer.bridgeOpacity = 0.7f + (bridge * (1f - 0.7f));
 
-        batch.cacheMode = true;
+        //batch.cacheMode = true;
         for(Tile tile : tileView){
             Block block = tile.block();
             Building build = tile.build;
@@ -699,9 +696,9 @@ public class AdvanceLighting extends Mod{
                 Liquid lc;
                 boolean setLiquid = (build != null && liquidBlocks.contains(block.id) && ((lc = build.liquids.current()) != null && build.liquids.currentAmount() > 0.001f && glowingLiquids.contains(lc.id)));
                 //boolean valid = validBlocks.contains(block.id) || onGlowingTile.contains(tile.pos()) || setLiquid;
-                boolean valid = validBlocks.contains(block.id) || setLiquid;
+                //boolean valid = validBlocks.contains(block.id) || setLiquid;
 
-                batch.setExcludeLayer(-100f, valid ? -100f : Layer.blockAfterCracks);
+                //batch.setExcludeLayer(-100f, valid ? -100f : Layer.blockAfterCracks);
 
                 if(setLiquid) batch.setLiquidMode(true);
                 block.drawBase(tile);
@@ -719,7 +716,7 @@ public class AdvanceLighting extends Mod{
                 }
             }
         }
-        batch.cacheMode = false;
+        //batch.cacheMode = false;
         batch.setExcludeLayer();
         Renderer.bridgeOpacity = bridge;
     }

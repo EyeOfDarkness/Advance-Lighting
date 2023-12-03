@@ -148,7 +148,7 @@ public class AltLightBatch extends SpriteBatch{
             return;
         }
 
-        if(cacheMode && color.a >= 0.999f && !glow && z >= excludeMinZ && z <= excludeMaxZ){
+        if(cacheMode && color.a >= 0.9f && !glow && z >= excludeMinZ && z <= excludeMaxZ){
             //boolean autoGlow = AdvanceLighting.autoGlowRegions.contains(region);
             CacheRequest cr = obtainCache();
             cr.set(region, x, y, originX, originY, width, height, rotation);
@@ -176,7 +176,7 @@ public class AltLightBatch extends SpriteBatch{
         rq.color = colorPacked;
         rq.mixColor = mixColorPacked;
         rq.z = z;
-        rq.blend = blending;
+        //rq.blend = blending;
 
         if(!Mathf.zero(rotation)){
             float worldOriginX = x + originX;
@@ -318,7 +318,7 @@ public class AltLightBatch extends SpriteBatch{
         rq.color = colorPacked;
         rq.mixColor = mixColorPacked;
         rq.z = z;
-        rq.blend = blending;
+        //rq.blend = blending;
         float[] vertices = rq.vertices;
 
         //System.arraycopy(spriteVertices, 0, rq.vertices, 0, 24);
@@ -401,10 +401,12 @@ public class AltLightBatch extends SpriteBatch{
             //requests2
             for(int i = 0; i < calls; i++){
                 LightRequest r = requests[i];
+                if(blending != r.blend && r.action == 0) setBlending(r.blend);
+
                 if(r.texture != null){
                     if(auto) r.convertAutoColor();
                     if(layerGlow) r.convertGlow();
-                    if(blending != r.blend) setBlending(r.blend);
+                    //if(blending != r.blend) setBlending(r.blend);
                     superDraw(r.texture, r.vertices, 24);
                 }else if(r.run != null){
                     r.run.run();
@@ -465,7 +467,7 @@ public class AltLightBatch extends SpriteBatch{
     @Override
     protected void setBlending(Blending blending){
         if(flushing){
-            super.flush();
+            if(blending != this.blending) super.flush();
         }else{
             glow = blending == Blending.additive;
         }
@@ -482,8 +484,8 @@ public class AltLightBatch extends SpriteBatch{
         r.texture = null;
         r.run = null;
         r.action = 0;
-        r.z = 0f;
-        r.blend = Blending.normal;
+        r.z = z;
+        r.blend = blending;
         calls++;
         return r;
     }
