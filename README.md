@@ -1,3 +1,31 @@
+## Intermod Support
+
+This mod can support other mods without needing a dependency.
+There are 2 ways to opt-in: "Internal" and "External"
+
+**Internal:** This means that the sprites are in the base mod itself. sprites must end with a suffix `-advance-light` for sprites that glows partially, `-advance-light-replace` to replace sprites, used for certain buildings that has gloss.
+
+**External:** A separate mod, the mod must have the name of the base mod with the prefix `advance-lighting-`. for sprites that partially glows no longer need a suffix and have the same
+  name as the base sprite, sprites to be replaced use `-replace` as a suffix.
+
+---
+
+Parts:
+Parts used by units and turrets, can have an extra sprite if the part heats up.
+
+Internal: `-advance-light-heat` suffix if the part doesnt have turret shading. if the part use turret shading `-advance-light-heat-l`, `-advance-light-heat-r` for left and right respectively
+
+External: `-heat`, `-heat-l`, `-heat-r`. same as above with different suffix.
+
+---
+
+Limitations:
+Currently, the mod doesnt doesnt iterate through every sprite in the game. It iterates through blocks and units, and won't be able to load certain sprites if the mod doesnt support it, or if the other mod uses custom classes that stores textures differently.
+
+You also cant make full glow sprites without unnecessarily rendering the bottom sprite.
+
+Sprite replacement only works on blocks, and only the block's main region, or conduits and ducts.
+
 ## Building for Desktop Testing
 
 1. Install JDK **17**.
