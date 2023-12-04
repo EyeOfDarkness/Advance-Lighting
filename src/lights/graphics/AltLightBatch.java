@@ -9,6 +9,7 @@ import arc.math.geom.*;
 import arc.struct.*;
 import arc.util.*;
 import lights.*;
+import lights.graphics.ALShaders.*;
 import mindustry.graphics.*;
 
 import java.util.*;
@@ -447,7 +448,19 @@ public class AltLightBatch extends SpriteBatch{
 
     @Override
     protected void setShader(Shader shader, boolean apply){
-        //
+        if(!flushing) return;
+
+        Shader alt;
+        if(shader != null && (alt = AdvanceLighting.validShaders.get(shader)) != null){
+            if(alt instanceof UnapplyableShader us) us.preapply();
+            super.setShader(alt, apply);
+        }else if(customShader != null){
+            Shader last = customShader;
+            super.setShader(null, apply);
+            if(last instanceof UnapplyableShader us){
+                us.unapply();
+            }
+        }
     }
 
     @Override

@@ -41,6 +41,7 @@ public class AdvanceLighting extends Mod{
     public static AltLightBatch batch;
     public static ObjectMap<TextureRegion, TextureRegion> glowEquiv = new ObjectMap<>(), replace = new ObjectMap<>();
     public static ObjectSet<TextureRegion> autoGlowRegions = new ObjectSet<>(), liquidRegions = new ObjectSet<>();
+    public static ObjectMap<Shader, Shader> validShaders = new ObjectMap<>();
     public static IntMap<TextureRegion> uvGlowRegions = new IntMap<>();
     public static IntMap<EnviroGlow> glowingEnvTiles = new IntMap<>();
     public static IntSet uvAutoGlowRegions = new IntSet();
@@ -81,6 +82,8 @@ public class AdvanceLighting extends Mod{
             }
         });
         Events.on(FileTreeInitEvent.class, e -> Core.app.post(() -> {
+            loadValidShaders();
+
             batch = new AltLightBatch();
             buffer = new FrameBuffer();
             subBuffer = new FrameBuffer();
@@ -398,6 +401,15 @@ public class AdvanceLighting extends Mod{
         return draw instanceof DrawLiquidRegion || draw instanceof DrawLiquidOutputs || draw instanceof DrawLiquidTile;
     }
 
+    void loadValidShaders(){
+        //validShaders.add(Shaders.build);
+        //validShaders.add(Shaders.blockbuild);
+        ALShaders.load();
+
+        validShaders.put(Shaders.build, ALShaders.build);
+        validShaders.put(Shaders.blockbuild, ALShaders.block);
+    }
+
     void load(){
         TextureRegion itemCircle = Core.atlas.find("ring-item");
         TextureRegion phase = Items.phaseFabric.fullIcon;
@@ -651,12 +663,6 @@ public class AdvanceLighting extends Mod{
                     loadParts(w.parts, w.name);
                 }
                 if(w.region.found() && (r2 = get(w.name)).found()){
-                    //TODO double flipping bug
-                    /*
-                    GlowPart g = new GlowPart(r2);
-                    g.mirror = w.flipSprite;
-                    w.parts.insert(0, g);
-                    */
                     glowEquiv.put(w.region, r2);
                 }
                 if(w.cellRegion.found()){
@@ -763,6 +769,8 @@ public class AdvanceLighting extends Mod{
 
         batch.setLayerGlow(Layer.buildBeam - 1f, true);
         batch.setLayerGlow(Layer.buildBeam + 1f, false);
+
+        Draw.drawRange(Layer.blockBuilding, () -> Draw.shader(Shaders.blockbuild, true), Draw::shader);
 
         Draw.draw(Layer.plans, () -> Vars.renderer.overlays.drawBottom());
         Draw.draw(Layer.overlayUI, () -> {
