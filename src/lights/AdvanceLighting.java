@@ -58,8 +58,8 @@ public class AdvanceLighting extends Mod{
     static boolean test = false;
     static StaticBlockRenderer staticRenderer;
     public static IntFloatMap glowingLiquidColors = new IntFloatMap();
-    public static IntSet glowLiquidFloors = IntSet.with(CacheLayer.slag.id, CacheLayer.cryofluid.id, CacheLayer.space.id),
-            glowingLiquids = new IntSet(), liquidBlocks = new IntSet();
+    public static IntSet glowingLiquids = new IntSet();
+    public static IntSet liquidBlocks = new IntSet();
     public static Floatf<Color> glowingLiquidColorsFunc = c -> {
         float v;
         if((v = glowingLiquidColors.get(ALStructs.rgb(c), -1f)) != -1f){
@@ -544,6 +544,10 @@ public class AdvanceLighting extends Mod{
                 }
                 if(dtr.liquid.found()){
                     liquidRegions.add(dtr.liquid);
+
+                    if(dtr.top.found()){
+                        replace.put(dtr.top, Core.atlas.find("clear-effect"));
+                    }
                 }
 
                 loadParts(dtr.parts, block.name);

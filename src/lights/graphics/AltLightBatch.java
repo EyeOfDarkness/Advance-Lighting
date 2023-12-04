@@ -12,9 +12,13 @@ import lights.*;
 import mindustry.graphics.*;
 
 import java.util.*;
+import java.util.concurrent.*;
 
 public class AltLightBatch extends SpriteBatch{
+    static ForkJoinHolder commonPool;
+
     LightRequest[] requests = new LightRequest[maxRequests];
+    float[] requestZ = new float[maxRequests];
     Seq<CacheRequest> cacheRequests = new Seq<>(false, 2048, CacheRequest.class);
     FloatSeq uncapture = new FloatSeq();
     int calls = 0;
@@ -51,6 +55,15 @@ public class AltLightBatch extends SpriteBatch{
         for(int i = 0; i < 2048; i++){
             //cacheRequests
             cacheRequests.add(new CacheRequest());
+        }
+
+        if(multithreaded){
+            try{
+                commonPool = new ForkJoinHolder();
+            }catch(Throwable th){
+                Log.err(th);
+                multithreaded = false;
+            }
         }
     }
 
@@ -97,14 +110,16 @@ public class AltLightBatch extends SpriteBatch{
     }
 
     public void setAuto(float z, boolean auto){
+        z(z);
         LightRequest rq = obtain();
-        rq.z = z;
+        //rq.z = z;
         //rq.texture = null;
         rq.action = (byte)(1 | ((auto ? 1 : 0) << 1));
     }
     public void setLayerGlow(float z, boolean auto){
+        z(z);
         LightRequest rq = obtain();
-        rq.z = z;
+        //rq.z = z;
         rq.action = (byte)(1 | ((auto ? 1 : 0) << 2));
     }
 
@@ -175,7 +190,7 @@ public class AltLightBatch extends SpriteBatch{
         rq.texture = region.texture;
         rq.color = colorPacked;
         rq.mixColor = mixColorPacked;
-        rq.z = z;
+        //rq.z = z;
         //rq.blend = blending;
 
         if(!Mathf.zero(rotation)){
@@ -317,7 +332,7 @@ public class AltLightBatch extends SpriteBatch{
         rq.texture = texture;
         rq.color = colorPacked;
         rq.mixColor = mixColorPacked;
-        rq.z = z;
+        //rq.z = z;
         //rq.blend = blending;
         float[] vertices = rq.vertices;
 
@@ -373,7 +388,7 @@ public class AltLightBatch extends SpriteBatch{
         }
         LightRequest r = obtain();
         r.run = request;
-        r.z = z;
+        //r.z = z;
     }
 
     @Override
@@ -392,7 +407,7 @@ public class AltLightBatch extends SpriteBatch{
 
             flushing = true;
 
-            sortRequests();
+            sortRequestsMain();
 
             //int size = requests.size;
 
@@ -484,7 +499,7 @@ public class AltLightBatch extends SpriteBatch{
         r.texture = null;
         r.run = null;
         r.action = 0;
-        r.z = z;
+        requestZ[calls] = r.z = z;
         r.blend = blending;
         calls++;
         return r;
@@ -499,6 +514,7 @@ public class AltLightBatch extends SpriteBatch{
             newRequests[i] = new LightRequest();
         }
         this.requests = newRequests;
+        requestZ = Arrays.copyOf(requestZ, newRequests.length);
     }
 
     CacheRequest obtainCache(){
@@ -568,22 +584,85 @@ public class AltLightBatch extends SpriteBatch{
                 """);
     }
 
+    boolean multithreaded = (Core.app.getVersion() >= 21 && !Core.app.isIOS()) || Core.app.isDesktop();
     LightRequest[] copy = new LightRequest[0];
     int[] contiguous = new int[2048], contiguousCopy = new int[2048];
+    int[] locs = new int[contiguous.length];
+    void sortRequestsMain(){
+        if(multithreaded){
+            sortRequestsThreaded();
+        }else{
+            sortRequests();
+        }
+    }
+
+    void sortRequestsThreaded(){
+        final int numRequests = calls;
+        if(copy.length < numRequests) copy = new LightRequest[numRequests + (numRequests >> 3)];
+        final LightRequest[] items = requests, itemCopy = copy;
+        final float[] itemZ = requestZ;
+        final Future<?> initTask = commonPool.pool.submit(() -> System.arraycopy(items, 0, itemCopy, 0, numRequests));
+
+        int[] contiguous = this.contiguous;
+        int ci = 0, cl = contiguous.length;
+        float z = itemZ[0];
+        int startI = 0;
+        // Point3: <z, index, length>
+        for(int i = 1; i < numRequests; i++){
+            if(itemZ[i] != z){ // if contiguous section should end
+                contiguous[ci] = Float.floatToRawIntBits(z + 16f);
+                contiguous[ci + 1] = startI;
+                contiguous[ci + 2] = i - startI;
+                ci += 3;
+                if(ci + 3 > cl){
+                    contiguous = Arrays.copyOf(contiguous, cl <<= 1);
+                }
+                z = itemZ[startI = i];
+            }
+        }
+        contiguous[ci] = Float.floatToRawIntBits(z + 16f);
+        contiguous[ci + 1] = startI;
+        contiguous[ci + 2] = numRequests - startI;
+        this.contiguous = contiguous;
+
+        final int L = (ci / 3) + 1;
+
+        if(contiguousCopy.length < contiguous.length) this.contiguousCopy = new int[contiguous.length];
+
+        final int[] sorted = BasicCountingSort.countingSortMapMT(contiguous, contiguousCopy, L);
+
+        if(locs.length < L + 1) locs = new int[L + L / 10];
+        final int[] locs = this.locs;
+        for(int i = 0; i < L; i++){
+            locs[i + 1] = locs[i] + sorted[i * 3 + 2];
+        }
+        try{
+            initTask.get();
+        }catch(Exception ignored){
+            System.arraycopy(items, 0, itemCopy, 0, numRequests);
+        }
+        PopulateTask.tasks = sorted;
+        PopulateTask.src = itemCopy;
+        PopulateTask.dest = items;
+        PopulateTask.locs = locs;
+        commonPool.pool.invoke(new PopulateTask(0, L));
+    }
+
     void sortRequests(){
         final int numRequests = calls;
         if(copy.length < numRequests) copy = new LightRequest[numRequests + (numRequests >> 3)];
         final LightRequest[] items = copy;
-        final LightRequest[] itemR = requests;
+        //final LightRequest[] itemR = requests;
+        final float[] itemZ = requestZ;
         System.arraycopy(requests, 0, items, 0, numRequests);
         int[] contiguous = this.contiguous;
         int ci = 0, cl = contiguous.length;
-        float z = requests[0].z;
+        float z = itemZ[0];
         int startI = 0;
 
         for(int i = 1; i < numRequests; i++){
-            if(itemR[i] == null) break;
-            if(itemR[i].z != z){
+            //if(itemR[i] == null) break;
+            if(itemZ[i] != z){
                 contiguous[ci] = Float.floatToRawIntBits(z + 16f);
                 contiguous[ci + 1] = startI;
                 contiguous[ci + 2] = i - startI;
@@ -592,7 +671,7 @@ public class AltLightBatch extends SpriteBatch{
                     contiguous = Arrays.copyOf(contiguous, cl <<= 1);
                 }
                 //z = itemZ[startI = i];
-                z = (itemR[startI = i].z);
+                z = (itemZ[startI = i]);
             }
         }
         contiguous[ci] = Float.floatToRawIntBits(z + 16f);
@@ -621,18 +700,177 @@ public class AltLightBatch extends SpriteBatch{
     }
 
     static class BasicCountingSort{
+        private static final int processors = Runtime.getRuntime().availableProcessors() * 8;
+
         static int[] locs = new int[100];
-        static final IntIntMap counts = new IntIntMap();
+        static final int[][] locses = new int[processors][100];
+
+        static final IntIntMap[] countses = new IntIntMap[processors];
         private static Point2[] entries = new Point2[100];
 
+        private static int[] entries3 = new int[300], entries3a = new int[300];
+        private static Integer[] entriesBacking = new Integer[100];
+
+        private static final CountingSortTask[] tasks = new CountingSortTask[processors];
+        private static final CountingSortTask2[] task2s = new CountingSortTask2[processors];
+        private static final Future<?>[] futures = new Future<?>[processors];
+
         static{
+            for(int i = 0; i < countses.length; i++) countses[i] = new IntIntMap();
             for(int i = 0; i < entries.length; i++) entries[i] = new Point2();
+
+            for(int i = 0; i < processors; i++){
+                tasks[i] = new CountingSortTask();
+                task2s[i] = new CountingSortTask2();
+            }
+        }
+
+        static class CountingSortTask implements Runnable{
+            static int[] arr;
+            int start, end, id;
+
+            public void set(int start, int end, int id){
+                this.start = start;
+                this.end = end;
+                this.id = id;
+            }
+
+            @Override
+            public void run(){
+                final int id = this.id, start = this.start, end = this.end;
+                int[] locs = locses[id];
+                final int[] arr = CountingSortTask.arr;
+                final IntIntMap counts = countses[id];
+                counts.clear();
+                int unique = 0;
+                for(int i = start; i < end; i++){
+                    int loc = counts.getOrPut(arr[i * 3], unique);
+                    arr[i * 3] = loc;
+                    if(loc == unique){
+                        if(unique >= locs.length){
+                            locs = Arrays.copyOf(locs, unique * 3 / 2);
+                        }
+                        locs[unique++] = 1;
+                    }else{
+                        locs[loc]++;
+                    }
+                }
+                locses[id] = locs;
+            }
+        }
+
+        static class CountingSortTask2 implements Runnable{
+            static int[] src, dest;
+            int start, end, id;
+
+            public void set(int start, int end, int id){
+                this.start = start;
+                this.end = end;
+                this.id = id;
+            }
+
+            @Override
+            public void run(){
+                final int start = this.start, end = this.end;
+                final int[] locs = locses[id];
+                final int[] src = CountingSortTask2.src, dest = CountingSortTask2.dest;
+                for(int i = end - 1, i3 = i * 3; i >= start; i--, i3 -= 3){
+                    final int destPos = --locs[src[i3]] * 3;
+                    dest[destPos] = src[i3];
+                    dest[destPos + 1] = src[i3 + 1];
+                    dest[destPos + 2] = src[i3 + 2];
+                }
+            }
+        }
+
+        static int[] countingSortMapMT(final int[] arr, final int[] swap, final int end){
+            final IntIntMap[] countses = BasicCountingSort.countses;
+            final int[][] locs = BasicCountingSort.locses;
+            final int threads = Math.min(processors, (end + 4095) / 4096); // 4096 Point3s to process per thread
+            final int thread_size = end / threads + 1;
+            final CountingSortTask[] tasks = BasicCountingSort.tasks;
+            final CountingSortTask2[] task2s = BasicCountingSort.task2s;
+            final Future<?>[] futures = BasicCountingSort.futures;
+            CountingSortTask.arr = CountingSortTask2.src = arr;
+            CountingSortTask2.dest = swap;
+
+            for(int s = 0, thread = 0; thread < threads; thread++, s += thread_size){
+                CountingSortTask task = tasks[thread];
+                final int stop = Math.min(s + thread_size, end);
+                task.set(s, stop, thread);
+                task2s[thread].set(s, stop, thread);
+                futures[thread] = commonPool.pool.submit(task);
+            }
+
+            int unique = 0;
+            for(int i = 0; i < threads; i++){
+                try{
+                    futures[i].get();
+                }catch(ExecutionException | InterruptedException e){
+                    commonPool.pool.execute(tasks[i]);
+                }
+                unique += countses[i].size;
+            }
+
+            final int L = unique;
+            if(entriesBacking.length < L){
+                entriesBacking = new Integer[L * 3 / 2];
+                entries3 = new int[L * 3 * 3 / 2];
+                entries3a = new int[L * 3 * 3 / 2];
+            }
+            final int[] entries = BasicCountingSort.entries3, entries3a = BasicCountingSort.entries3a;
+            final Integer[] entriesBacking = BasicCountingSort.entriesBacking;
+            int j = 0;
+            for(int i = 0; i < threads; i++){
+                if(countses[i].size == 0) continue;
+                final IntIntMap.Entries countEntries = countses[i].entries();
+                final IntIntMap.Entry entry = countEntries.next();
+                entries[j] = entry.key;
+                entries[j + 1] = entry.value;
+                entries[j + 2] = i;
+                j += 3;
+                while(countEntries.hasNext){
+                    countEntries.next();
+                    entries[j] = entry.key;
+                    entries[j + 1] = entry.value;
+                    entries[j + 2] = i;
+                    j += 3;
+                }
+            }
+
+            for(int i = 0; i < L; i++){
+                entriesBacking[i] = i;
+            }
+            Arrays.sort(entriesBacking, 0, L, Structs.comparingInt(i -> entries[i * 3]));
+            for(int i = 0; i < L; i++){
+                int from = entriesBacking[i] * 3, to = i * 3;
+                entries3a[to] = entries[from];
+                entries3a[to + 1] = entries[from + 1];
+                entries3a[to + 2] = entries[from + 2];
+            }
+
+            for(int i = 0, pos = 0; i < L * 3; i += 3){
+                pos = (locs[entries3a[i + 2]][entries3a[i + 1]] += pos);
+            }
+
+            for(int thread = 0; thread < threads; thread++){
+                futures[thread] = commonPool.pool.submit(task2s[thread]);
+            }
+            for(int i = 0; i < threads; i++){
+                try{
+                    futures[i].get();
+                }catch(ExecutionException | InterruptedException e){
+                    commonPool.pool.execute(task2s[i]);
+                }
+            }
+
+            return swap;
         }
 
         static int[] countingSortMap(final int[] arr, final int[] swap, final int end){
             //int[] locs = CountingSort.locs;
             int[] locs = BasicCountingSort.locs;
-            final IntIntMap counts = BasicCountingSort.counts;
+            final IntIntMap counts = BasicCountingSort.countses[0];
             counts.clear();
 
             int unique = 0;
@@ -682,6 +920,47 @@ public class AltLightBatch extends SpriteBatch{
             }
 
             return swap;
+        }
+    }
+
+    static class PopulateTask extends RecursiveAction{
+        int from, to;
+        static int[] tasks;
+        static LightRequest[] src;
+        static LightRequest[] dest;
+        static int[] locs;
+
+        //private static final int threshold = 256;
+        PopulateTask(int from, int to){
+            this.from = from;
+            this.to = to;
+        }
+
+        @Override
+        protected void compute(){
+            final int[] locs = PopulateTask.locs;
+            if(to - from > 1 && locs[to] - locs[from] > 2048){
+                final int half = (locs[to] + locs[from]) >> 1;
+                int mid = Arrays.binarySearch(locs, from, to, half);
+                if(mid < 0) mid = -mid - 1;
+                if(mid != from && mid != to){
+                    invokeAll(new PopulateTask(from, mid), new PopulateTask(mid, to));
+                    return;
+                }
+            }
+            final LightRequest[] src = PopulateTask.src, dest = PopulateTask.dest;
+            final int[] tasks = PopulateTask.tasks;
+            for(int i = from; i < to; i++){
+                final int point = i * 3, pos = tasks[point + 1], length = tasks[point + 2];
+                if(length < 10){
+                    final int end = pos + length;
+                    for(int sj = pos, dj = locs[i]; sj < end; sj++, dj++){
+                        dest[dj] = src[sj];
+                    }
+                }else{
+                    System.arraycopy(src, pos, dest, locs[i], Math.min(length, dest.length - locs[i]));
+                }
+            }
         }
     }
 }

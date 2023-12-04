@@ -51,11 +51,11 @@ public class StaticBlockRenderer{
         }
         if(tile.block() instanceof StaticTree){
             boolean edge = false;
-            boolean on = AdvanceLighting.glowLiquidFloors.contains(tile.floor().cacheLayer.id);
+            //boolean on = AdvanceLighting.glowLiquidFloors.contains(tile.floor().cacheLayer.id);
             for(Point2 d : Geometry.d8){
                 int tx = tile.x + d.x, ty = tile.y + d.y;
                 Tile t = Vars.world.tile(tx, ty);
-                if(t != null && t.block() == Blocks.air && (on || AdvanceLighting.glowLiquidFloors.contains(t.floor().cacheLayer.id))){
+                if(t != null && t.block() == Blocks.air){
                     edge = true;
                     break;
                 }
