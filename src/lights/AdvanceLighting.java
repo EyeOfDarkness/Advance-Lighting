@@ -34,6 +34,7 @@ import mindustry.world.blocks.power.*;
 import mindustry.world.blocks.production.*;
 import mindustry.world.blocks.sandbox.*;
 import mindustry.world.draw.*;
+import mindustry.world.meta.*;
 
 import java.lang.reflect.*;
 
@@ -203,9 +204,16 @@ public class AdvanceLighting extends Mod{
             });
             st.sliderPref("al-bloom-threshold", 0, 0, 100, s -> {
                 if(bloom != null){
-                    bloom.threshold = s / 100f;
+                    bloom.setThreshold(s / 100f);
                 }
                 return s + "%";
+            });
+            st.sliderPref("al-bloom-saturation", 10, 0, 20, s -> {
+                if(bloom != null){
+                    bloom.setSaturation(s / 1.25f);
+                }
+
+                return Strings.fixed(((s / 10f) * 100f), 2) + "%";
             });
             st.sliderPref("al-bloom-blur-amount", 2, 0, 25, s -> {
                 if(bloom != null){
@@ -222,6 +230,19 @@ public class AdvanceLighting extends Mod{
             st.sliderPref("al-bloom-flare-length", 30, 0, 100, s -> {
                 if(bloom != null){
                     bloom.flareLength = s / 10f;
+                }
+                return (s / 10f) + "";
+            });
+            st.sliderPref("al-bloom-flare-direction", 0, 0, 360 / 15, s -> {
+                if(bloom != null){
+                    bloom.flareDirection = s * 15f;
+                }
+
+                return (s * 15) + " " + StatUnit.degrees.localized();
+            });
+            st.sliderPref("al-bloom-blur-size", 10, 0, 100, s -> {
+                if(bloom != null){
+                    bloom.blurSize = s / 10f;
                 }
                 return (s / 10f) + "";
             });
@@ -252,7 +273,11 @@ public class AdvanceLighting extends Mod{
             bloom.flarePasses = Core.settings.getInt("al-bloom-flare-amount", 3);
             bloom.intensity = Core.settings.getInt("al-bloom-intensity", 75) / 100f;
             bloom.flareLength = Core.settings.getInt("al-bloom-flare-length", 30) / 10f;
-            bloom.threshold = Core.settings.getInt("al-bloom-threshold", 0) / 100f;
+            bloom.blurSize = Core.settings.getInt("al-bloom-blur-size", 10) / 10f;
+            bloom.flareDirection = Core.settings.getInt("al-bloom-flare-direction", 0);
+
+            bloom.setThreshold(Core.settings.getInt("al-bloom-threshold", 0) / 100f);
+            bloom.setSaturation(Core.settings.getInt("al-bloom-saturation", 10) / 1.25f);
 
             bloom.setBlurFeedBack(Core.settings.getInt("al-bloom-blur-feedback", 100) / 100f);
             bloom.setFlareFeedBack(Core.settings.getInt("al-bloom-flare-feedback", 100) / 100f);

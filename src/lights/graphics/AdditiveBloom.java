@@ -7,15 +7,16 @@ import arc.graphics.Pixmap.*;
 import arc.graphics.g2d.*;
 import arc.graphics.gl.*;
 import arc.math.*;
-import lights.*;
 import mindustry.*;
 
 public class AdditiveBloom{
     public int blurPasses = 2, flarePasses = 3;
-    public float intensity = 0.75f, threshold = 0f, flareLength = 3f;
+    public float intensity = 0.75f, threshold = 0f, flareLength = 3f, blurSize = 1f;
     public float blurFeedBack = 1f, flareFeedBack = 1f;
+    public float saturation = 12f;
+    public float flareDirection = 0f;
     private FrameBuffer pingPong1, pingPong2, pingPong3;
-    private Shader blurShader, renderShader;
+    private Shader blurShader, renderShader, thresholdShader;
 
     private float lastIntens = 0.75f;
 
@@ -31,6 +32,7 @@ public class AdditiveBloom{
 
         blurShader = createBlurShader();
         renderShader = createRenderShader();
+        thresholdShader = createThresholdShader();
 
         setSize(width, height);
         setIntensity(0.75f);
@@ -56,9 +58,7 @@ public class AdditiveBloom{
 
         pingPong1.begin(Color.black);
         //Draw.blit(texture, AdvanceLighting.screenShader);
-        renderShader.bind();
-        renderShader.setUniformf("u_threshold", threshold);
-        Draw.blit(texture, renderShader);
+        Draw.blit(texture, thresholdShader);
         pingPong1.end();
 
         for(int i = 0; i < blurPasses; i++){
@@ -67,21 +67,23 @@ public class AdditiveBloom{
             pingPong2.begin();
             blurShader.bind();
             blurShader.setUniformf("u_feedBack", f);
-            blurShader.setUniformf("dir", 1f, 0f);
+            blurShader.setUniformf("dir", blurSize, 0f);
             pingPong1.blit(blurShader);
             pingPong2.end();
 
             pingPong1.begin();
             blurShader.bind();
             blurShader.setUniformf("u_feedBack", f);
-            blurShader.setUniformf("dir", 0f, 1f);
+            blurShader.setUniformf("dir", 0f, blurSize);
             pingPong2.blit(blurShader);
             pingPong1.end();
         }
         
         if(flarePasses > 0){
+            float sx = Mathf.cosDeg(flareDirection) * flareLength, sy = Mathf.sinDeg(flareDirection) * flareLength;
+
             pingPong3.begin(Color.black);
-            Draw.blit(texture, AdvanceLighting.screenShader);
+            Draw.blit(texture, thresholdShader);
             pingPong3.end();
 
             for(int i = 0; i < flarePasses; i++){
@@ -90,14 +92,14 @@ public class AdditiveBloom{
                 pingPong2.begin();
                 blurShader.bind();
                 blurShader.setUniformf("u_feedBack", f);
-                blurShader.setUniformf("dir", flareLength, 0f);
+                blurShader.setUniformf("dir", sx, sy);
                 pingPong3.blit(blurShader);
                 pingPong2.end();
 
                 pingPong3.begin();
                 blurShader.bind();
                 blurShader.setUniformf("u_feedBack", f);
-                blurShader.setUniformf("dir", flareLength, 0f);
+                blurShader.setUniformf("dir", sx, sy);
                 pingPong2.blit(blurShader);
                 pingPong3.end();
             }
@@ -105,8 +107,6 @@ public class AdditiveBloom{
 
         //Gl.enable(Gl.blend);
         Blending.additive.apply();
-        renderShader.bind();
-        renderShader.setUniformf("u_threshold", 0f);
         pingPong1.blit(renderShader);
         if(flarePasses > 0){
             pingPong3.blit(renderShader);
@@ -122,6 +122,16 @@ public class AdditiveBloom{
     public void setIntensity(float v){
         renderShader.bind();
         renderShader.setUniformf("u_intensity", v);
+    }
+    public void setSaturation(float v){
+        saturation = v;
+        renderShader.bind();
+        renderShader.setUniformf("u_saturation", saturation);
+    }
+    public void setThreshold(float v){
+        threshold = v;
+        thresholdShader.bind();
+        thresholdShader.setUniformf("u_threshold", threshold);
     }
     public void setBlurFeedBack(float v){
         blurFeedBack = v;
@@ -145,10 +155,56 @@ public class AdditiveBloom{
                 uniform sampler2D u_texture;
                 
                 uniform float u_intensity;
+                uniform float u_saturation;
+                
+                varying vec2 v_texCoords;
+                
+                void main(){
+                    vec4 v = texture2D(u_texture, v_texCoords);
+                    vec3 tvc = mix(vec3(0.0, 0.0, 0.0), v.rgb, v.a);
+                    
+                    float mx = max(tvc.r, max(tvc.g, tvc.b));
+                    float mn = min(tvc.r, min(tvc.g, tvc.b));
+                    
+                    float power = (mx - mn) * u_saturation;
+                    
+                    float apow = power + 1.0;
+                    tvc.r = pow(tvc.r, 1.0 + power) * apow;
+                    tvc.g = pow(tvc.g, 1.0 + power) * apow;
+                    tvc.b = pow(tvc.b, 1.0 + power) * apow;
+                    
+                    //v.a = v.a * ta;
+                    if(u_intensity < 1.0){
+                        float ta = 1.0 - pow(1.0 - u_intensity, 4.0);
+                        float ip = max(u_intensity, 0.05);
+                        float nmax = max(max(tvc.r, max(tvc.g, tvc.b)), 1.0);
+                        
+                        tvc.r = pow(tvc.r / nmax, 1.0 / ip) * ta * nmax;
+                        tvc.g = pow(tvc.g / nmax, 1.0 / ip) * ta * nmax;
+                        tvc.b = pow(tvc.b / nmax, 1.0 / ip) * ta * nmax;
+                    }
+                    
+                    //gl_FragColor = v;
+                    gl_FragColor = vec4(tvc, 1.0);
+                }
+                """);
+    }
+    private static Shader createThresholdShader(){
+        return new Shader("""
+                attribute vec4 a_position;
+                attribute vec2 a_texCoord0;
+                
+                varying vec2 v_texCoords;
+                
+                void main(){
+                    v_texCoords = a_texCoord0;
+                    gl_Position = a_position;
+                }
+                """, """
+                uniform sampler2D u_texture;
                 uniform float u_threshold;
                 
                 varying vec2 v_texCoords;
-                const float sat = 12.0;
                 
                 void main(){
                     vec4 v = texture2D(u_texture, v_texCoords);
@@ -159,46 +215,8 @@ public class AdditiveBloom{
                         tvc.r = max(0.0, (tvc.r - ff) / (1.0 - ff));
                         tvc.g = max(0.0, (tvc.g - ff) / (1.0 - ff));
                         tvc.b = max(0.0, (tvc.b - ff) / (1.0 - ff));
-                        //float vrt = -min(((tvc.r + tvc.g + tvc.b) / 3.0) - u_threshold, 0.0);
-                        
-                        //tvc.r = max(0.0, min(1.0, (tvc.r - vrt) / (1.0 - vrt)));
-                        //tvc.g = max(0.0, min(1.0, (tvc.g - vrt) / (1.0 - vrt)));
-                        //tvc.b = max(0.0, min(1.0, (tvc.b - vrt) / (1.0 - vrt)));
                     }
-                    
-                    //float asat = sat * 0.25 + 1.0;
-                    
-                    //float mx = max(v.r, max(v.g, v.b));
-                    //float mn = min(v.r, min(v.g, v.b));
-                    float mx = max(tvc.r, max(tvc.g, tvc.b));
-                    float mn = min(tvc.r, min(tvc.g, tvc.b));
-                    
-                    float power = (mx - mn) * sat;
-                    //float power2 = power * 0.25 + 0.75;
-                    
-                    //v.r = pow(pow(v.r, power) * asat, 1.0 / power2);
-                    //v.g = pow(pow(v.g, power) * asat, 1.0 / power2);
-                    //v.b = pow(pow(v.b, power) * asat, 1.0 / power2);
-                    
-                    //v.r = pow(v.r, pow(power, 1f - (v.r - mn) * 0.5));
-                    //v.g = pow(v.g, pow(power, 1f - (v.g - mn) * 0.5));
-                    //v.b = pow(v.b, pow(power, 1f - (v.b - mn) * 0.5));
-                    
-                    tvc.r = pow(tvc.r, 1.5 / (1.0 + (tvc.r - mn) * power));
-                    tvc.g = pow(tvc.g, 1.5 / (1.0 + (tvc.g - mn) * power));
-                    tvc.b = pow(tvc.b, 1.5 / (1.0 + (tvc.b - mn) * power));
-                    
-                    float ta = 1.0 - pow(1.0 - u_intensity, 2.0);
-                    float ip = max(u_intensity, 0.05);
-                    
-                    //v.a = v.a * ta;
-                    if(u_intensity < 1.0){
-                        tvc.r = pow(tvc.r, 1.0 / ip) * ta;
-                        tvc.g = pow(tvc.g, 1.0 / ip) * ta;
-                        tvc.b = pow(tvc.b, 1.0 / ip) * ta;
-                    }
-                    
-                    //gl_FragColor = v;
+                
                     gl_FragColor = vec4(tvc, 1.0);
                 }
                 """);
