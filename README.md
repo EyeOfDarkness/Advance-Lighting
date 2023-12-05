@@ -1,6 +1,6 @@
 ## Intermod Support
 
-This mod can support other mods without needing a dependency.
+This mod allows other mods to have glowing sprites without needing a dependency.
 There are 2 ways to opt-in: "Internal" and "External"
 
 **Internal:** This means that the sprites are in the base mod itself. sprites must end with a suffix `-advance-light` for sprites that glows partially, `-advance-light-replace` to replace sprites, used for certain buildings that has gloss.
