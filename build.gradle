@@ -1,97 +1,124 @@
-apply plugin: "java"
-
-version '1.0'
-
-sourceSets.main.java.srcDirs = ["src"]
-
-repositories{
-    mavenCentral()
-    maven{ url 'https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository' }
-    maven{ url 'https://www.jitpack.io' }
+plugins{
+    id 'java'
 }
 
-java{
-    targetCompatibility = 8
-    sourceCompatibility = JavaVersion.VERSION_17
-}
+configure(allprojects){
+    apply plugin: 'java'
 
-ext{
-    //the build number that this mod is made for
-    mindustryVersion = 'v146'
-    jabelVersion = "93fde537c7"
-    sdkRoot = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
-}
+    // Main source directory.
+    sourceSets.main.java.srcDirs = ['src/']
 
-//java 8 backwards compatibility flag
-allprojects{
-    tasks.withType(JavaCompile){
-        options.compilerArgs.addAll(['--release', '8'])
+    dependencies{
+        // Downgrade Java 9+ syntax into being available in Java 8.
+        annotationProcessor "com.github.GlennFolker.EntityAnno:downgrader:$entVersion"
+
+        // Depend on Mindustry/Arc classpaths.
+        compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
+        compileOnly "com.github.Anuken.Arc:arc-core:$arcVersion"
+    }
+
+    repositories{
+        // Necessary Maven repositories to pull the dependencies.
+        mavenCentral()
+        maven{url 'https://www.jitpack.io'}
+        maven{url 'https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository'}
+    }
+
+    // Use Java 17 syntax, but target Java 8 bytecode version.
+    tasks.withType(JavaCompile).configureEach{
+        sourceCompatibility = 17
+        options.release = 8
+
+        options.incremental = true
+        options.encoding = 'UTF-8'
     }
 }
 
-dependencies{
-    compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
-    compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
+configure(project(':fetcher')){
+    // Bump this number if you modify the fetching algorithm to re-run it on the next compilation.
+    def revision = 0
 
-    annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
-}
+    tasks.register('fetchSprites', JavaExec){
+        dependsOn classes
+        dependsOn configurations.runtimeClasspath
 
-//force arc version
-configurations.all{
-    resolutionStrategy.eachDependency { details ->
-        if(details.requested.group == 'com.github.Anuken.Arc'){
-            details.useVersion "$mindustryVersion"
+        def outputProv = layout.buildDirectory.file('output')
+        def cacheProv = layout.buildDirectory.file('output/cache.txt')
+
+        outputs.upToDateWhen{
+            def cache = cacheProv.get().asFile
+            if(!cache.exists()){
+                false
+            }else{
+                try{
+                    def content = cache.text.split('/')
+                    def ver = content[0].strip()
+                    def rev = content[1].strip()
+
+                    if(ver == mindustryVersion && rev == "$revision"){
+                        true
+                    }
+                }catch(def ignored){
+                    false
+                }
+            }
         }
-    }
-}
 
-task jarAndroid{
-    dependsOn "jar"
-
-    doLast{
-        if(!sdkRoot || !new File(sdkRoot).exists()) throw new GradleException("No valid Android SDK found. Ensure that ANDROID_HOME is set to your Android SDK directory.");
-
-        def platformRoot = new File("$sdkRoot/platforms/").listFiles().sort().reverse().find{ f -> new File(f, "android.jar").exists()}
-
-        if(!platformRoot) throw new GradleException("No android.jar found. Ensure that you have an Android platform installed.")
-
-        //collect dependencies needed for desugaring
-        def dependencies = (configurations.compileClasspath.asList() + configurations.runtimeClasspath.asList() + [new File(platformRoot, "android.jar")]).collect{ "--classpath $it.path" }.join(" ")
-
-        //dex and desugar files - this requires d8 in your PATH
-        "d8 $dependencies --min-api 14 --output ${project.archivesBaseName}Android.jar ${project.archivesBaseName}Desktop.jar"
-            .execute(null, new File("$buildDir/libs")).waitForProcessOutput(System.out, System.err)
-    }
-}
-
-jar{
-    archiveFileName = "${base.archivesBaseName}Desktop.jar"
-
-    from{
-        configurations.runtimeClasspath.collect{ it.isDirectory() ? it : zipTree(it) }
-    }
-
-    from(rootDir){
-        include "mod.json"
-        include "icon.png"
-    }
-
-    from("assets/"){
-        include "**"
-    }
-}
-
-task deploy(type: Jar){
-    dependsOn jarAndroid
-    dependsOn jar
-    archiveFileName = "${base.archivesBaseName}.jar"
-
-    from{ [zipTree("$buildDir/libs/${project.archivesBaseName}Desktop.jar"), zipTree("$buildDir/libs/${project.archivesBaseName}Android.jar")] }
-
-    doLast{
-        delete{
-            delete "$buildDir/libs/${project.archivesBaseName}Desktop.jar"
-            delete "$buildDir/libs/${project.archivesBaseName}Android.jar"
+        doFirst{
+            def output = outputProv.get().asFile
+            output.deleteDir()
+            output.mkdirs()
         }
+
+        doLast{
+            def cache = cacheProv.get().asFile
+            cache.text = "$mindustryVersion/$revision"
+        }
+
+        mainClass = 'lights.fetcher.AdvanceLightingFetcher'
+        classpath = sourceSets.main.runtimeClasspath
+        standardInput = System.in
+        workingDir = outputProv
+    }
+}
+
+configure(rootProject){
+    jar{
+        def fetch = project(':fetcher').tasks.fetchSprites
+        dependsOn fetch
+        mustRunAfter fetch
+
+        archiveFileName = "${rootProject.name}-Desktop.jar"
+
+        from files(sourceSets.main.output.classesDirs)
+        from files(sourceSets.main.output.resourcesDir)
+        from configurations.runtimeClasspath.collect{it.isDirectory() ? it : zipTree(it)}
+
+        from files(layout.projectDirectory.file('assets'))
+        from files(project(':fetcher').layout.projectDirectory.file('output'))
+    }
+
+    tasks.register('dex', Jar){
+        dependsOn jar
+        archiveFileName = "${rootProject.name}.jar"
+
+        final def desktopJar = (jar as Jar).archiveFile.get().asFile
+        final def dexJar = file("$dex.temporaryDir/Dexed.jar")
+        doFirst{
+            def command = "d8 --min-api $sdkAPI --output $dexJar $desktopJar"
+
+            (configurations.compileClasspath.asList() + configurations.runtimeClasspath.asList()).forEach{
+                if(it.exists()) command += " --classpath $it.path"
+            }
+
+            def sdkRoot = System.getenv('ANDROID_SDK_ROOT') ?: System.getenv('ANDROID_HOME')
+            command += " --lib ${file("$sdkRoot/platforms/android-$sdkVersion/android.jar")}"
+
+            if(System.getProperty('os.name').contains('Windows')) command = "cmd /c $command"
+            command.execute(null, layout.buildDirectory.file('libs').get().asFile).waitForProcessOutput(System.out, System.err)
+        }
+
+        from zipTree(desktopJar)
+        from zipTree(dexJar)
     }
 }
