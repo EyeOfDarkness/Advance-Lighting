@@ -1,6 +1,24 @@
-plugins{
-    id 'java'
+buildscript{
+    dependencies{
+        classpath "com.github.Anuken.Arc:arc-core:$arcVersion"
+    }
+
+    repositories{
+        // Necessary Maven repositories for build script classpath.
+        mavenCentral()
+        maven{url 'https://www.jitpack.io'}
+        maven{url 'https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository'}
+    }
 }
+
+import arc.files.*
+import arc.graphics.*
+import arc.util.*
+import arc.util.io.*
+import arc.util.serialization.*
+import groovy.transform.*
+
+import java.util.concurrent.atomic.*
 
 configure(allprojects){
     apply plugin: 'java'
@@ -11,10 +29,6 @@ configure(allprojects){
     dependencies{
         // Downgrade Java 9+ syntax into being available in Java 8.
         annotationProcessor "com.github.GlennFolker.EntityAnno:downgrader:$entVersion"
-
-        // Depend on Mindustry/Arc classpaths.
-        compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
-        compileOnly "com.github.Anuken.Arc:arc-core:$arcVersion"
     }
 
     repositories{
@@ -34,60 +48,114 @@ configure(allprojects){
     }
 }
 
-configure(project(':fetcher')){
-    // Bump this number if you modify the fetching algorithm to re-run it on the next compilation.
-    def revision = 0
+@CompileStatic
+void fetchSprites(String mindustryVersion, File baseDir){
+    final def amount = new AtomicInteger(1), total = new AtomicInteger(0)
+    Http.get("https://api.github.com/repos/Anuken/Mindustry/contents/core/assets-raw/sprites/units?ref=$mindustryVersion")
+        .timeout(0)
+        .error{throw new RuntimeException(it)}
+        .block{response(baseDir, amount, total, it)}
 
-    tasks.register('fetchSprites', JavaExec){
-        dependsOn classes
-        dependsOn configurations.runtimeClasspath
+    while(amount.get() > 0) Thread.yield()
+    println "Fetched ${total.get()} unit sprites"
+}
 
-        def outputProv = layout.buildDirectory.file('output')
-        def cacheProv = layout.buildDirectory.file('output/cache.txt')
+@CompileStatic
+void response(File dir, AtomicInteger amount, AtomicInteger total, Http.HttpResponse res){
+    final def list = Jval.read(res.resultAsString).asArray()
+    amount.addAndGet(list.size)
 
-        outputs.upToDateWhen{
-            def cache = cacheProv.get().asFile
-            if(!cache.exists()){
-                false
-            }else{
-                try{
-                    def content = cache.text.split('/')
-                    def ver = content[0].strip()
-                    def rev = content[1].strip()
+    for(final def val : list){
+        final def name = val.getString('name')
+        switch(val.getString('type')){
+            case 'file':
+                Http.get(val.getString('download_url'))
+                    .timeout(0)
+                    .error{throw new RuntimeException(it)}
+                    .submit{
+                        if(name.endsWith('.png')){
+                            final def image = new Pixmap(Streams.copyBytes(it.resultAsStream))
+                            new Fi(file("$dir/$name")).writePng(image)
+                        }
 
-                    if(ver == mindustryVersion && rev == "$revision"){
-                        true
+                        total.addAndGet(1)
+                        amount.addAndGet(-1)
                     }
-                }catch(def ignored){
-                    false
-                }
-            }
+                break
+            case 'dir':
+                Http.get(val.getString('url'))
+                    .timeout(0)
+                    .error{throw new RuntimeException(it)}
+                    .submit{response(file("$dir/$name"), amount, total, it)}
+                break
+        }
+    }
+
+    amount.addAndGet(-1)
+}
+
+configure(project(':proc')){
+    tasks.register('fetchSprites'){
+        final def fetchOutputProv = layout.buildDirectory.file('fetched')
+        doFirst{
+            def fetchOutput = fetchOutputProv.get().asFile
+            fetchOutput.deleteDir()
+            fetchOutput.mkdir()
+
+            fetchSprites(mindustryVersion, fetchOutput)
+            file("$fetchOutput/cache.txt").text = mindustryVersion
         }
 
+        outputs.upToDateWhen{
+            def fetchOutput = fetchOutputProv.get().asFile
+            def cache = file("$fetchOutput/cache.txt")
+            cache.exists() && cache.text == mindustryVersion
+        }
+    }
+
+    tasks.register('genSprites', JavaExec){
+        dependsOn fetchSprites
+        dependsOn configurations.runtimeClasspath
+
+        final def genOutputProv = layout.buildDirectory.file('output')
+        final def fetchSpritesProv = layout.buildDirectory.file('fetched')
+
+        mainClass = 'lights.gen.Generator'
+        classpath = sourceSets.main.runtimeClasspath
+        standardInput = System.in
+        workingDir = genOutputProv
+
         doFirst{
-            def output = outputProv.get().asFile
-            output.deleteDir()
-            output.mkdirs()
+            def genOutput = genOutputProv.get().asFile
+            genOutput.deleteDir()
+            genOutput.mkdir()
+
+            args fetchSpritesProv.get().asFile
         }
 
         doLast{
-            def cache = cacheProv.get().asFile
-            cache.text = "$mindustryVersion/$revision"
+            def genOutput = genOutputProv.get().asFile
+            file("$genOutput/cache.txt").text = mindustryVersion
         }
 
-        mainClass = 'lights.fetcher.AdvanceLightingFetcher'
-        classpath = sourceSets.main.runtimeClasspath
-        standardInput = System.in
-        workingDir = outputProv
+        outputs.upToDateWhen{
+            def genOutput = genOutputProv.get().asFile
+            def cache = file("$genOutput/cache.txt")
+            cache.exists() && cache.text == mindustryVersion
+        }
+    }
+
+    dependencies{
+        // Depend on Mindustry/Arc classpaths.
+        implementation "com.github.Anuken.Mindustry:core:$mindustryVersion"
+        implementation "com.github.Anuken.Arc:arc-core:$arcVersion"
+        implementation "com.github.Anuken.Arc:natives-desktop:$arcVersion"
     }
 }
 
 configure(rootProject){
     jar{
-        def fetch = project(':fetcher').tasks.fetchSprites
-        dependsOn fetch
-        mustRunAfter fetch
-
+        dependsOn project(':proc').tasks.genSprites
         archiveFileName = "${rootProject.name}-Desktop.jar"
 
         from files(sourceSets.main.output.classesDirs)
@@ -95,7 +163,9 @@ configure(rootProject){
         from configurations.runtimeClasspath.collect{it.isDirectory() ? it : zipTree(it)}
 
         from files(layout.projectDirectory.file('assets'))
-        from files(project(':fetcher').layout.projectDirectory.file('output'))
+        from files(project(':proc').layout.projectDirectory.file('output')){
+            exclude 'cache.txt'
+        }
     }
 
     tasks.register('dex', Jar){
@@ -120,5 +190,11 @@ configure(rootProject){
 
         from zipTree(desktopJar)
         from zipTree(dexJar)
+    }
+
+    dependencies{
+        // Depend on Mindustry/Arc classpaths.
+        compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
+        compileOnly "com.github.Anuken.Arc:arc-core:$arcVersion"
     }
 }
