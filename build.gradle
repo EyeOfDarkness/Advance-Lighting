@@ -25,7 +25,6 @@ configure(allprojects){
 
     // Main source directory.
     sourceSets.main.java.srcDirs = ['src/']
-
     dependencies{
         // Downgrade Java 9+ syntax into being available in Java 8.
         annotationProcessor "com.github.GlennFolker.EntityAnno:downgrader:$entVersion"
@@ -40,11 +39,21 @@ configure(allprojects){
 
     // Use Java 17 syntax, but target Java 8 bytecode version.
     tasks.withType(JavaCompile).configureEach{
-        sourceCompatibility = 17
-        options.release = 8
+        sourceCompatibility = JavaVersion.current().ordinal() - JavaVersion.VERSION_17.ordinal() + 17
+        options.release.set 8
+        options.compilerArgs << '-Xlint:-options'
 
         options.incremental = true
         options.encoding = 'UTF-8'
+    }
+
+    // Force Arc version to be the same.
+    configurations.configureEach{
+        resolutionStrategy.eachDependency{
+            if(requested.group == 'com.github.Anuken.Arc'){
+                useVersion arcVersion
+            }
+        }
     }
 }
 
@@ -57,7 +66,7 @@ void fetchSprites(String mindustryVersion, File baseDir){
         .block{response(baseDir, amount, total, it)}
 
     while(amount.get() > 0) Thread.yield()
-    println "Fetched ${total.get()} unit sprites"
+    logger.lifecycle "Fetched ${total.get()} unit sprites"
 }
 
 @CompileStatic
@@ -96,7 +105,7 @@ void response(File dir, AtomicInteger amount, AtomicInteger total, Http.HttpResp
 
 configure(project(':proc')){
     tasks.register('fetchSprites'){
-        final def fetchOutputProv = layout.buildDirectory.file('fetched')
+        final def fetchOutputProv = layout.buildDirectory.dir('fetched')
         doFirst{
             def fetchOutput = fetchOutputProv.get().asFile
             fetchOutput.deleteDir()
@@ -106,6 +115,7 @@ configure(project(':proc')){
             file("$fetchOutput/cache.txt").text = mindustryVersion
         }
 
+        outputs.dir fetchOutputProv
         outputs.upToDateWhen{
             def fetchOutput = fetchOutputProv.get().asFile
             def cache = file("$fetchOutput/cache.txt")
@@ -114,11 +124,10 @@ configure(project(':proc')){
     }
 
     tasks.register('genSprites', JavaExec){
-        dependsOn fetchSprites
-        dependsOn configurations.runtimeClasspath
+        dependsOn fetchSprites, configurations.runtimeClasspath
 
-        final def genOutputProv = layout.buildDirectory.file('output')
-        final def fetchSpritesProv = layout.buildDirectory.file('fetched')
+        final def genOutputProv = layout.buildDirectory.dir('output')
+        final def fetchSpritesProv = layout.buildDirectory.dir('fetched')
 
         mainClass = 'lights.gen.Generator'
         classpath = sourceSets.main.runtimeClasspath
@@ -138,6 +147,7 @@ configure(project(':proc')){
             file("$genOutput/cache.txt").text = mindustryVersion
         }
 
+        outputs.dir genOutputProv
         outputs.upToDateWhen{
             def genOutput = genOutputProv.get().asFile
             def cache = file("$genOutput/cache.txt")
@@ -146,7 +156,7 @@ configure(project(':proc')){
     }
 
     dependencies{
-        // Depend on Mindustry/Arc classpaths.
+        // Depend on Mindustry/Arc classpath.
         implementation "com.github.Anuken.Mindustry:core:$mindustryVersion"
         implementation "com.github.Anuken.Arc:arc-core:$arcVersion"
         implementation "com.github.Anuken.Arc:natives-desktop:$arcVersion"
@@ -155,7 +165,7 @@ configure(project(':proc')){
 
 configure(rootProject){
     jar{
-        dependsOn project(':proc').tasks.genSprites
+        inputs.files project(':proc').tasks.genSprites
         archiveFileName = "${rootProject.name}-Desktop.jar"
 
         from files(sourceSets.main.output.classesDirs)
@@ -169,31 +179,46 @@ configure(rootProject){
     }
 
     tasks.register('dex', Jar){
-        dependsOn jar
+        inputs.files tasks.jar
         archiveFileName = "${rootProject.name}.jar"
 
-        final def desktopJar = (jar as Jar).archiveFile.get().asFile
-        final def dexJar = file("$dex.temporaryDir/Dexed.jar")
-        doFirst{
-            def command = "d8 --min-api $sdkAPI --output $dexJar $desktopJar"
+        final def desktopJar = tasks.jar.archiveFile
+        final def dexJar = file("$temporaryDir/Dexed.jar")
 
-            (configurations.compileClasspath.asList() + configurations.runtimeClasspath.asList()).forEach{
-                if(it.exists()) command += " --classpath $it.path"
+        from zipTree(desktopJar), zipTree(dexJar)
+        doFirst{
+            def sdkRoot = file(
+                System.getenv('ANDROID_SDK_ROOT') ?: System.getenv('ANDROID_HOME') ?:
+                { throw new GradleException('Neither `ANDROID_SDK_ROOT` nor `ANDROID_HOME` is set') }
+            )
+
+            def d8 = file("$sdkRoot/build-tools/$androidBuildVersion/d8")
+            if(!d8.exists()){
+                throw new GradleException("Android SDK `build-tools;$androidBuildVersion` isn't installed or is corrupted")
             }
 
-            def sdkRoot = System.getenv('ANDROID_SDK_ROOT') ?: System.getenv('ANDROID_HOME')
-            command += " --lib ${file("$sdkRoot/platforms/android-$sdkVersion/android.jar")}"
+            def input = desktopJar.get().asFile
+            def command = "$d8 --release --min-api $androidMinVersion --output $dexJar $input"
 
-            if(System.getProperty('os.name').contains('Windows')) command = "cmd /c $command"
-            command.execute(null, layout.buildDirectory.file('libs').get().asFile).waitForProcessOutput(System.out, System.err)
+            (configurations.compileClasspath.asList() + configurations.runtimeClasspath.asList()).forEach{
+                if(it.exists()) command = "$command --classpath $it"
+            }
+
+            def androidJar = file("$sdkRoot/platforms/android-$androidSdkVersion/android.jar")
+            if(!androidJar.exists()){
+                throw new GradleException("Android SDK `platforms;android-$androidSdkVersion` isn't installed or is corrupted")
+            }
+
+            command = "$command --lib $androidJar"
+            if(OS.isWindows) command = "cmd /c $command"
+
+            logger.log(LogLevel.LIFECYCLE, 'Running `d8`.')
+            command.execute(null, layout.projectDirectory.asFile).waitForProcessOutput(System.out, System.err)
         }
-
-        from zipTree(desktopJar)
-        from zipTree(dexJar)
     }
 
     dependencies{
-        // Depend on Mindustry/Arc classpaths.
+        // Depend on Mindustry/Arc classpath.
         compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
         compileOnly "com.github.Anuken.Arc:arc-core:$arcVersion"
     }

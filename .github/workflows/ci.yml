@@ -12,16 +12,10 @@ jobs:
         with:
           java-version: 17
           distribution: temurin
-      - name: Set up PATH
-        run: echo "${ANDROID_HOME}/build-tools/30.0.1" >> $GITHUB_PATH
-      - name: General information
-        run: |
-          java --version
-          d8 --version
-      - name: Build and dexify mod jar file
+      - name: Build mod artifact
         run: |
           chmod +x gradlew
-          ./gradlew jar dex
+          ./gradlew clean dex
       - name: Upload built mod jar file
         uses: actions/upload-artifact@v3
         with:
