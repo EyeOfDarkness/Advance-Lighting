@@ -129,10 +129,10 @@ configure(project(':proc')){
         mainClass = 'lights.gen.Generator'
         classpath = sourceSets.main.runtimeClasspath
         standardInput = System.in
-        workingDir = genOutputProv
+        workingDir = genOutputProv.map{it.dir('sprites').dir('units')}
 
         doFirst{
-            def genOutput = genOutputProv.get().dir('sprites').asFile
+            def genOutput = genOutputProv.get().dir('sprites').dir('units').asFile
             genOutput.deleteDir()
             genOutput.mkdirs()
 
@@ -170,7 +170,9 @@ configure(rootProject){
         from configurations.runtimeClasspath.collect{it.isDirectory() ? it : zipTree(it)}
 
         from files(layout.projectDirectory.dir('assets'))
-        from files(project(':proc').layout.buildDirectory.dir('output'))
+        from files(project(':proc').layout.buildDirectory.dir('output')){
+            exclude 'cache.txt'
+        }
     }
 
     tasks.register('dex', Jar){
