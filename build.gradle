@@ -169,6 +169,11 @@ configure(rootProject){
         from files(sourceSets.main.output.resourcesDir)
         from configurations.runtimeClasspath.collect{it.isDirectory() ? it : zipTree(it)}
 
+        from(layout.projectDirectory){
+            include 'mod.json'
+            include 'icon.png'
+        }
+
         from files(layout.projectDirectory.dir('assets'))
         from files(project(':proc').layout.buildDirectory.dir('output')){
             exclude 'cache.txt'
