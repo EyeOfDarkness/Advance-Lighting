@@ -61,16 +61,15 @@ configure(allprojects){
 void fetchSprites(String mindustryVersion, File baseDir){
     final def amount = new AtomicInteger(1), total = new AtomicInteger(0)
     Http.get("https://api.github.com/repos/Anuken/Mindustry/contents/core/assets-raw/sprites/units?ref=$mindustryVersion")
-        .timeout(0)
         .error{throw new RuntimeException(it)}
         .block{response(baseDir, amount, total, it)}
 
-    while(amount.get() > 0) Thread.yield()
+    do{Thread.yield()}while(amount.get() > 0)
     logger.lifecycle "Fetched ${total.get()} unit sprites"
 }
 
 @CompileStatic
-void response(File dir, AtomicInteger amount, AtomicInteger total, Http.HttpResponse res){
+void response(final File dir, final AtomicInteger amount, final AtomicInteger total, final Http.HttpResponse res){
     final def list = Jval.read(res.resultAsString).asArray()
     amount.addAndGet(list.size)
 
@@ -79,7 +78,6 @@ void response(File dir, AtomicInteger amount, AtomicInteger total, Http.HttpResp
         switch(val.getString('type')){
             case 'file':
                 Http.get(val.getString('download_url'))
-                    .timeout(0)
                     .error{throw new RuntimeException(it)}
                     .submit{
                         if(name.endsWith('.png')){
@@ -93,7 +91,6 @@ void response(File dir, AtomicInteger amount, AtomicInteger total, Http.HttpResp
                 break
             case 'dir':
                 Http.get(val.getString('url'))
-                    .timeout(0)
                     .error{throw new RuntimeException(it)}
                     .submit{response(file("$dir/$name"), amount, total, it)}
                 break
@@ -135,9 +132,9 @@ configure(project(':proc')){
         workingDir = genOutputProv
 
         doFirst{
-            def genOutput = genOutputProv.get().asFile
+            def genOutput = genOutputProv.get().dir('sprites').asFile
             genOutput.deleteDir()
-            genOutput.mkdir()
+            genOutput.mkdirs()
 
             args fetchSpritesProv.get().asFile
         }
@@ -172,10 +169,8 @@ configure(rootProject){
         from files(sourceSets.main.output.resourcesDir)
         from configurations.runtimeClasspath.collect{it.isDirectory() ? it : zipTree(it)}
 
-        from files(layout.projectDirectory.file('assets'))
-        from files(project(':proc').layout.projectDirectory.file('output')){
-            exclude 'cache.txt'
-        }
+        from files(layout.projectDirectory.dir('assets'))
+        from files(project(':proc').layout.buildDirectory.dir('output'))
     }
 
     tasks.register('dex', Jar){

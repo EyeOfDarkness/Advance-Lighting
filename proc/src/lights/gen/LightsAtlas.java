@@ -16,7 +16,7 @@ public class LightsAtlas extends TextureAtlas implements Eachable<LightsRegion>{
 
     public LightsAtlas(){
         regions.orderedKeys().ordered = false;
-        clear = addRegion("clear", new LightsRegion("clear", ".", Pixmaps.blankPixmap()));
+        clear = addRegion("clear", new LightsRegion("clear", "./", Pixmaps.blankPixmap()));
     }
 
     @Override
@@ -32,7 +32,7 @@ public class LightsAtlas extends TextureAtlas implements Eachable<LightsRegion>{
     @Override
     public LightsRegion addRegion(String name, Texture texture, int x, int y, int width, int height){
         Pixmap pixmap = texture.getTextureData().getPixmap();
-        LightsRegion reg = new LightsRegion(name, ".", Pixmaps.crop(pixmap, x, y, width, height));
+        LightsRegion reg = new LightsRegion(name, "./", Pixmaps.crop(pixmap, x, y, width, height));
 
         regions.put(name, reg);
         return reg;
@@ -41,7 +41,7 @@ public class LightsAtlas extends TextureAtlas implements Eachable<LightsRegion>{
     @Override
     public LightsRegion find(String name){
         if(!regions.containsKey(name)){
-            return new LightsRegion(name, ".", null);
+            return new LightsRegion(name, "./", null);
         }
 
         return regions.get(name);
@@ -82,15 +82,9 @@ public class LightsAtlas extends TextureAtlas implements Eachable<LightsRegion>{
         }
     }
 
-    public void save(){
-        for(var reg : regions.values()){
-            reg.save(false);
-        }
-    }
-
     public static class LightsRegion extends AtlasRegion{
-        private final String relative;
-        private final Pixmap pixmap;
+        public final String relative;
+        private Pixmap pixmap;
 
         public LightsRegion(String name, String relative, Pixmap pixmap){
             this.name = name;
@@ -111,6 +105,11 @@ public class LightsAtlas extends TextureAtlas implements Eachable<LightsRegion>{
             return pixmap != null;
         }
 
+        public void pixmap(Pixmap other){
+            if(pixmap != null) pixmap.dispose();
+            pixmap = other;
+        }
+
         public Pixmap pixmap(){
             if(!found()) throw new IllegalArgumentException("Region does not exist: " + name);
             return pixmap;
@@ -124,7 +123,11 @@ public class LightsAtlas extends TextureAtlas implements Eachable<LightsRegion>{
             if(!found()) throw new IllegalArgumentException("Cannot save an invalid region: " + name);
             Fi.get(relative).child(name + ".png").writePng(pixmap);
 
-            if(add) atlas.addRegion(name, this);
+            if(add) add();
+        }
+
+        public void add(){
+            atlas.addRegion(name, this);
         }
     }
 }
