@@ -186,7 +186,14 @@ public class Generator {
 
                 if(type.drawCell){
                     image.draw(conv(type.previewRegion).pixmap(), true);
-                    drawCenter.get(image, conv(type.cellRegion).pixmap());
+
+                    var cell = conv(type.cellRegion).pixmap();
+                    cell.replace(in -> switch(in){
+                        case 0xffffffff -> 0xffa664ff;
+                        case 0xdcc6c6ff, 0xdcc5c5ff -> 0xd06b53ff;
+                        default -> 0;
+                    });
+                    drawCenter.get(image, cell);
                 }
 
                 for(var weapon : weapons){
@@ -197,7 +204,15 @@ public class Generator {
                     drawWeapon.get(weapon, wepReg);
                     if(weapon.top) wepReg.dispose();
 
-                    if(weapon.cellRegion.found()) drawWeapon.get(weapon, conv(weapon.cellRegion).pixmap());
+                    if(weapon.cellRegion.found()) {
+                        var cell = conv(weapon.cellRegion).pixmap();
+                        cell.replace(in -> switch(in){
+                            case 0xffffffff -> 0xffa664ff;
+                            case 0xdcc6c6ff, 0xdcc5c5ff -> 0xd06b53ff;
+                            default -> 0;
+                        });
+                        drawWeapon.get(weapon, cell);
+                    }
                 }
 
                 return new LightsRegion(type.name + "-full", conv(type.region).relative + "icons/", image)::add;
@@ -216,7 +231,7 @@ public class Generator {
                 for(int y = 0, height = image.height; y < height; y++){
                     int pixel = image.getRaw(x, y);
                     if(!mask.contains(pixel)){
-                        if(pixel != 0xffffffff && pixel != 0xdcc6c6ff) image.setRaw(x, y, reg.relative.endsWith("icons/")
+                        if(pixel != 0xffa664ff && pixel != 0xd06b53ff) image.setRaw(x, y, reg.relative.endsWith("icons/")
                             ? ((Color.blackRgba & 0xffffff00) | Color.ai(pixel))
                             : Color.clearRgba
                         );
