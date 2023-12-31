@@ -7,6 +7,8 @@ uniform vec2 u_uv;
 uniform vec2 u_uv2;
 uniform vec2 u_texsize;
 
+uniform int u_glowing;
+
 varying vec4 v_color;
 varying vec2 v_texCoords;
 
@@ -28,5 +30,9 @@ void main(){
 
     c.a *= alpha;
 
-    gl_FragColor = c * mix(v_color, vec4(1.0, 1.0, 1.0, v_color.a), glow);
+    if(u_glowing < 1){
+        gl_FragColor = c * mix(v_color, vec4(1.0, 1.0, 1.0, v_color.a), glow);
+    }else{
+        gl_FragColor = c * v_color;
+    }
 }

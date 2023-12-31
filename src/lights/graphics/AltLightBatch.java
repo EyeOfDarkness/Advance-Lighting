@@ -157,6 +157,27 @@ public class AltLightBatch extends SpriteBatch{
         if(flushing){
             float c = colorPacked;
             colorPacked = glow ? colorPacked : blackAlphaBits;
+            
+            TextureRegion rep;
+            if((rep = AdvanceLighting.shaderReplace.get(region)) != null){
+                TextureRegion last = region;
+                region = rep;
+                if(AdvanceLighting.autoGlowRegions.contains(region)) colorPacked = c;
+
+                //float dw = (width / last.width) * rep.width;
+                //float dh = (height / last.height) * rep.height;
+                float dw = (width / last.width) * rep.width;
+                float dh = (height / last.height) * rep.height;
+                float dox = (dw - width) / 2f;
+                float doy = (dh - height) / 2f;
+
+                x -= dox;
+                y -= doy;
+                originX += dox;
+                originY += doy;
+                width = dw;
+                height = dh;
+            }
 
             super.draw(region, x, y, originX, originY, width, height, rotation);
 
@@ -174,6 +195,24 @@ public class AltLightBatch extends SpriteBatch{
         LightRequest rq = obtain();
         float[] vertices = rq.vertices;
 
+        TextureRegion rep;
+        if((rep = AdvanceLighting.replace.get(region)) != null){
+            TextureRegion last = region;
+            region = rep;
+
+            float dw = (width / last.width) * rep.width;
+            float dh = (height / last.height) * rep.height;
+            float dox = (dw - width) / 2f;
+            float doy = (dh - height) / 2f;
+
+            x -= dox;
+            y -= doy;
+            originX += dox;
+            originY += doy;
+            width = dw;
+            height = dh;
+        }
+
         float color = (glow || AdvanceLighting.autoGlowRegions.contains(region)) ? this.colorPacked : blackAlphaBits;
         float mixColor = this.mixColorPacked;
 
@@ -181,11 +220,6 @@ public class AltLightBatch extends SpriteBatch{
             float v = liquidGlow < 0 ? AdvanceLighting.glowingLiquidColorsFunc.get(this.color) : liquidGlow;
             tmpColor.set(blackAlpha).lerp(this.color, v);
             color = tmpColor.toFloatBits();
-        }
-
-        TextureRegion rep;
-        if((rep = AdvanceLighting.replace.get(region)) != null){
-            region = rep;
         }
 
         rq.texture = region.texture;

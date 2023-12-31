@@ -3,7 +3,7 @@
     "displayName": "Advance lighting",
     "author": "EoD",
     "description": "Not recommended for weak devices. Only supports Vanilla/Supported-Json content. This mod replaces/add some effects, and may cause issues with mods that actively check on those effects. May conflict with vanilla bloom.",
-    "version": "v1.5.2.0",
+    "version": "v1.5.3.0",
     "minGameVersion": 145,
     "main": "lights.AdvanceLighting",
     "hidden": true,
