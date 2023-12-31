@@ -13,12 +13,13 @@ buildscript{
 
 import arc.files.*
 import arc.graphics.*
+import arc.struct.*
 import arc.util.*
 import arc.util.io.*
 import arc.util.serialization.*
 import groovy.transform.*
 
-import java.util.concurrent.atomic.*
+import java.util.concurrent.*
 
 configure(allprojects){
     apply plugin: 'java'
@@ -58,46 +59,55 @@ configure(allprojects){
 }
 
 @CompileStatic
-void fetchSprites(String mindustryVersion, File baseDir){
-    final def amount = new AtomicInteger(1), total = new AtomicInteger(0)
+void fetchSprites(final String mindustryVersion, final File baseDir){
+    final Queue<Runnable> runs = new Queue<>()
     Http.get("https://api.github.com/repos/Anuken/Mindustry/contents/core/assets-raw/sprites/units?ref=$mindustryVersion")
+        .timeout(0)
         .error{throw new RuntimeException(it)}
-        .block{response(baseDir, amount, total, it)}
+        .block{response(baseDir, runs, it)}
 
-    do{Thread.yield()}while(amount.get() > 0)
-    logger.lifecycle "Fetched ${total.get()} unit sprites"
+    logger.lifecycle "Fetching $runs.size unit sprites."
+
+    final def exec = Threads.executor('Sprites-Fetcher', OS.cores)
+    final Queue<Future<?>> fetches = new Queue<>()
+    while(!runs.isEmpty()){
+        def run = runs.removeFirst()
+        fetches.addLast(exec.submit(run))
+    }
+
+    while(!fetches.isEmpty()) Threads.await(fetches.removeFirst())
+    Threads.await(exec)
 }
 
 @CompileStatic
-void response(final File dir, final AtomicInteger amount, final AtomicInteger total, final Http.HttpResponse res){
+void response(final File dir, final Queue<Runnable> runs, final Http.HttpResponse res){
     final def list = Jval.read(res.resultAsString).asArray()
-    amount.addAndGet(list.size)
-
     for(final def val : list){
         final def name = val.getString('name')
         switch(val.getString('type')){
             case 'file':
-                Http.get(val.getString('download_url'))
-                    .error{throw new RuntimeException(it)}
-                    .submit{
-                        if(name.endsWith('.png')){
-                            final def image = new Pixmap(Streams.copyBytes(it.resultAsStream))
-                            new Fi(file("$dir/$name")).writePng(image)
-                        }
-
-                        total.addAndGet(1)
-                        amount.addAndGet(-1)
-                    }
+                if(name.endsWith('.png')){
+                    final def url = val.getString('download_url')
+                    runs.addLast({
+                        Http.get(url)
+                            .timeout(0)
+                            .error{throw new RuntimeException(it)}
+                            .block{
+                                final def image = new Pixmap(Streams.copyBytes(it.resultAsStream))
+                                new Fi(file("$dir/$name")).writePng(image)
+                                image.dispose()
+                            }
+                    })
+                }
                 break
             case 'dir':
                 Http.get(val.getString('url'))
+                    .timeout(0)
                     .error{throw new RuntimeException(it)}
-                    .submit{response(file("$dir/$name"), amount, total, it)}
+                    .block{response(file("$dir/$name"), runs, it)}
                 break
         }
     }
-
-    amount.addAndGet(-1)
 }
 
 configure(project(':proc')){
