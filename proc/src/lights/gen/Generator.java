@@ -221,7 +221,7 @@ public class Generator {
                                 image.setRaw(x, y, switch(pixel){
                                     case 0xffffffff -> 0xffa664ff;
                                     case 0xdcc6c6ff, 0xdcc5c5ff, 0xdbc5c5ff -> 0xd06b53ff;
-                                    default -> Color.clearRgba;
+                                    default -> Color.ai(pixel);
                                 });
                             }else{
                                 image.setRaw(x, y, Color.clearRgba);
