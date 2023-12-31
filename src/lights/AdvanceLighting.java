@@ -40,9 +40,10 @@ import java.lang.reflect.*;
 
 public class AdvanceLighting extends Mod{
     public static AltLightBatch batch;
-    public static ObjectMap<TextureRegion, TextureRegion> glowEquiv = new ObjectMap<>(), replace = new ObjectMap<>();
+    public static ObjectMap<TextureRegion, TextureRegion> glowEquiv = new ObjectMap<>(), replace = new ObjectMap<>(), shaderReplace = new ObjectMap<>();
     public static ObjectSet<TextureRegion> autoGlowRegions = new ObjectSet<>(), liquidRegions = new ObjectSet<>();
     public static ObjectMap<Shader, Shader> validShaders = new ObjectMap<>();
+    public static ObjectSet<Shader> validShaderSet = new ObjectSet<>();
     public static IntMap<TextureRegion> uvGlowRegions = new IntMap<>();
     public static IntMap<EnviroGlow> glowingEnvTiles = new IntMap<>();
     public static IntSet uvAutoGlowRegions = new IntSet();
@@ -433,6 +434,9 @@ public class AdvanceLighting extends Mod{
 
         validShaders.put(Shaders.build, ALShaders.build);
         validShaders.put(Shaders.blockbuild, ALShaders.block);
+
+        validShaderSet.add(ALShaders.build);
+        validShaderSet.add(ALShaders.block);
     }
 
     void load(){
@@ -652,6 +656,15 @@ public class AdvanceLighting extends Mod{
                 glowEquiv.put(unit.region, r);
             }
             if(unit.drawCell) autoGlowRegions.add(unit.cellRegion);
+
+            if(unit.fullIcon.found()){
+                TextureRegion full = get(unit.name + "-full");
+                if(full.found()){
+                    shaderReplace.put(unit.fullIcon, full);
+                    replace.put(unit.fullIcon, full);
+                    autoGlowRegions.add(full);
+                }
+            }
 
             if(unit.sample instanceof Legsc){
                 TextureRegion rl1 = unit.legRegion, rl2 = unit.legBaseRegion;

@@ -8,6 +8,8 @@ uniform vec2 u_uv2;
 uniform float u_progress;
 uniform float u_time;
 
+uniform int u_glowing;
+
 varying vec4 v_color;
 varying vec2 v_texCoords;
 
@@ -34,7 +36,11 @@ void main(){
     vec2 coords = (v_texCoords-u_uv) / v;
     float value = coords.x + coords.y;
 
-    vec4 color = vec4(0.0, 0.0, 0.0, texture2D(u_texture, t).a);
+    //vec4 color = vec4(0.0, 0.0, 0.0, texture2D(u_texture, t).a);
+    vec4 color = texture2D(u_texture, t);
+    if(u_glowing < 1){
+        color = vec4(0.0, 0.0, 0.0, color.a);
+    }
 
     vec2 center = ((u_uv + u_uv2)/2.0 - u_uv) /v;
     float dst = (abs(center.x - coords.x) + abs(center.y - coords.y))/2.0;
