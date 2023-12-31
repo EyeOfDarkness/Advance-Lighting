@@ -107,7 +107,7 @@ public class Generator {
         runs.run();
 
         Draw.scl = 1f / 4f;
-        content.units().each(type -> tasks.addLast(exec.submit(() -> {
+        content.units().each(type -> !type.internal, type -> tasks.addLast(exec.submit(() -> {
             try{
                 Unit sample = type.constructor.get();
                 Func<Pixmap, Pixmap> outline = i -> i.outline(type.outlineColor, type.outlineRadius);
