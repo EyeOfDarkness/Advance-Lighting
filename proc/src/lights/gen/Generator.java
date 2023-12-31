@@ -107,7 +107,7 @@ public class Generator {
         runs.run();
 
         Draw.scl = 1f / 4f;
-        content.units().each(type -> !type.internal && !type.isHidden(), type -> tasks.addLast(exec.submit(() -> {
+        content.units().each(type -> tasks.addLast(exec.submit(() -> {
             try{
                 Unit sample = type.constructor.get();
                 Func<Pixmap, Pixmap> outline = i -> i.outline(type.outlineColor, type.outlineRadius);
@@ -122,7 +122,8 @@ public class Generator {
                 weapons.each(Weapon::load);
                 weapons.removeAll(w -> !w.region.found());
 
-                var image = type.segments > 0 ? conv(type.segmentRegions[0]).pixmap().copy() : outline.get(conv(type.previewRegion).pixmap());
+                var imageRef = conv(type.segments > 0 ? type.segmentRegions[0] : type.previewRegion);
+                var image = outline.get(imageRef.pixmap());
 
                 Func<Weapon, Pixmap> weaponRegion = weapon -> atlas.find(weapon.name + "-preview", weapon.region).pixmap();
                 Cons2<Weapon, Pixmap> drawWeapon = (weapon, pixmap) -> {
@@ -139,7 +140,9 @@ public class Generator {
                 boolean anyUnder = false;
                 if(sample instanceof Crawlc){
                     for(int i = 1; i < type.segments; i++){
-                        drawCenter.get(image, conv(type.segmentRegions[i]).pixmap());
+                        var pixmap = outline.get(conv(type.segmentRegions[i]).pixmap());
+                        drawCenter.get(image, pixmap);
+                        pixmap.dispose();
                     }
                 }
 
@@ -200,9 +203,9 @@ public class Generator {
                     if(weapon.cellRegion.found()) drawWeapon.get(weapon, conv(weapon.cellRegion).pixmap());
                 }
 
-                return new LightsRegion(type.name + "-full", conv(type.region).relative + "icons/", image)::add;
+                return new LightsRegion(type.name + "-full", "icons/", image)::add;
             }catch(Throwable err){
-                Log.warn("Skipping unit '@': @", type.name, Strings.getFinalCause(err));
+                Log.info("Skipping unit '@': @", type.name, Strings.getFinalCause(err));
             }
 
             return null;
@@ -242,7 +245,8 @@ public class Generator {
     }
 
     public static LightsRegion conv(TextureRegion reg){
-        if(!reg.found() || !(reg instanceof LightsRegion r)) throw new IllegalArgumentException("Invalid region");
+        if(!(reg instanceof LightsRegion r)) throw new IllegalArgumentException("Invalid region");
+        if(!r.found()) throw new IllegalArgumentException("Region '" + r.name + "' doesn't exist");
         return r;
     }
 }
