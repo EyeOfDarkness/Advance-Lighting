@@ -188,11 +188,11 @@ public class Generator {
                     image.draw(conv(type.previewRegion).pixmap(), true);
 
                     var cell = conv(type.cellRegion).pixmap();
-                    cell.replace(in -> switch(in){
+                    /*cell.replace(in -> switch(in){
                         case 0xffffffff -> 0xffa664ff;
                         case 0xdcc6c6ff, 0xdcc5c5ff -> 0xd06b53ff;
                         default -> 0;
-                    });
+                    });*/
                     drawCenter.get(image, cell);
                 }
 
@@ -206,11 +206,11 @@ public class Generator {
 
                     if(weapon.cellRegion.found()) {
                         var cell = conv(weapon.cellRegion).pixmap();
-                        cell.replace(in -> switch(in){
+                        /*cell.replace(in -> switch(in){
                             case 0xffffffff -> 0xffa664ff;
                             case 0xdcc6c6ff, 0xdcc5c5ff -> 0xd06b53ff;
                             default -> 0;
-                        });
+                        });*/
                         drawWeapon.get(weapon, cell);
                     }
                 }
@@ -231,10 +231,15 @@ public class Generator {
                 for(int y = 0, height = image.height; y < height; y++){
                     int pixel = image.getRaw(x, y);
                     if(!mask.contains(pixel)){
-                        if(pixel != 0xffa664ff && pixel != 0xd06b53ff) image.setRaw(x, y, reg.relative.endsWith("icons/")
-                            ? ((Color.blackRgba & 0xffffff00) | Color.ai(pixel))
-                            : Color.clearRgba
-                        );
+                        if(reg.relative.endsWith("icons/")){
+                            image.setRaw(x, y, switch(pixel){
+                                case 0xffffffff -> 0xffa664ff;
+                                case 0xdcc6c6ff, 0xdcc5c5ff -> 0xd06b53ff;
+                                default -> Color.clearRgba;
+                            });
+                        }else{
+                            image.setRaw(x, y, Color.clearRgba);
+                        }
                     }else{
                         found = true;
                     }
