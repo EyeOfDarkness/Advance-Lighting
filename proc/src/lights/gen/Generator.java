@@ -186,14 +186,7 @@ public class Generator {
 
                 if(type.drawCell){
                     image.draw(conv(type.previewRegion).pixmap(), true);
-
-                    var cell = conv(type.cellRegion).pixmap();
-                    /*cell.replace(in -> switch(in){
-                        case 0xffffffff -> 0xffa664ff;
-                        case 0xdcc6c6ff, 0xdcc5c5ff -> 0xd06b53ff;
-                        default -> 0;
-                    });*/
-                    drawCenter.get(image, cell);
+                    drawCenter.get(image, conv(type.cellRegion).pixmap());
                 }
 
                 for(var weapon : weapons){
@@ -204,15 +197,7 @@ public class Generator {
                     drawWeapon.get(weapon, wepReg);
                     if(weapon.top) wepReg.dispose();
 
-                    if(weapon.cellRegion.found()) {
-                        var cell = conv(weapon.cellRegion).pixmap();
-                        /*cell.replace(in -> switch(in){
-                            case 0xffffffff -> 0xffa664ff;
-                            case 0xdcc6c6ff, 0xdcc5c5ff -> 0xd06b53ff;
-                            default -> 0;
-                        });*/
-                        drawWeapon.get(weapon, cell);
-                    }
+                    if(weapon.cellRegion.found()) drawWeapon.get(weapon, conv(weapon.cellRegion).pixmap());
                 }
 
                 return new LightsRegion(type.name + "-full", conv(type.region).relative + "icons/", image)::add;
@@ -224,31 +209,33 @@ public class Generator {
         })));
 
         wait.run();
-        atlas.each(reg -> tasks.addLast(exec.submit(() -> {
-            var image = reg.pixmap();
-            boolean found = false;
-            for(int x = 0, width = image.width; x < width; x++){
-                for(int y = 0, height = image.height; y < height; y++){
-                    int pixel = image.getRaw(x, y);
-                    if(!mask.contains(pixel)){
-                        if(reg.relative.endsWith("icons/")){
-                            image.setRaw(x, y, switch(pixel){
-                                case 0xffffffff -> 0xffa664ff;
-                                case 0xdcc6c6ff, 0xdcc5c5ff -> 0xd06b53ff;
-                                default -> Color.clearRgba;
-                            });
+        atlas.each(reg -> {
+            if(!Seq.with("-cell", "-preview").contains(reg.name::endsWith)) tasks.addLast(exec.submit(() -> {
+                var image = reg.pixmap();
+                boolean found = false;
+                for(int x = 0, width = image.width; x < width; x++){
+                    for(int y = 0, height = image.height; y < height; y++){
+                        int pixel = image.getRaw(x, y);
+                        if(!mask.contains(pixel)){
+                            if(reg.relative.endsWith("icons/")){
+                                image.setRaw(x, y, switch(pixel){
+                                    case 0xffffffff -> 0xffa664ff;
+                                    case 0xdcc6c6ff, 0xdcc5c5ff, 0xdbc5c5ff -> 0xd06b53ff;
+                                    default -> Color.clearRgba;
+                                });
+                            }else{
+                                image.setRaw(x, y, Color.clearRgba);
+                            }
                         }else{
-                            image.setRaw(x, y, Color.clearRgba);
+                            found = true;
                         }
-                    }else{
-                        found = true;
                     }
                 }
-            }
 
-            if(found) reg.save(false);
-            return null;
-        })));
+                if(found) reg.save(false);
+                return null;
+            }));
+        });
 
         wait.run();
         atlas.dispose();
