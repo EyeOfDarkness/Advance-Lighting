@@ -259,6 +259,24 @@ public class AdvanceLighting extends Mod{
                 }
                 return (s / 100f) + "";
             });
+            st.sliderPref("al-bloom-diffuse-amount", 0, 0, 15, s -> {
+                if(bloom != null){
+                    bloom.blurDiffuseAmount = s;
+                }
+                return s + "";
+            });
+            st.sliderPref("al-bloom-diffuse-size", 175, 0, 300, s -> {
+                if(bloom != null){
+                    bloom.blurDiffuseSize = s / 100f;
+                }
+                return (s / 100f) + "";
+            });
+            st.sliderPref("al-bloom-diffuse-feedback", 100, 100, 200, s -> {
+                if(bloom != null){
+                    bloom.blurDiffuseFeedBack = s / 100f;
+                }
+                return (s / 100f) + "";
+            });
 
             st.row();
 
@@ -282,6 +300,10 @@ public class AdvanceLighting extends Mod{
 
             bloom.setBlurFeedBack(Core.settings.getInt("al-bloom-blur-feedback", 100) / 100f);
             bloom.setFlareFeedBack(Core.settings.getInt("al-bloom-flare-feedback", 100) / 100f);
+
+            bloom.blurDiffuseAmount = Core.settings.getInt("al-bloom-diffuse-amount", 0);
+            bloom.blurDiffuseSize = Core.settings.getInt("al-bloom-diffuse-size", 175) / 100f;
+            bloom.blurDiffuseFeedBack = Core.settings.getInt("al-bloom-diffuse-feedback", 100) / 100f;
         }
         bloomActive = on;
     }

@@ -7,6 +7,7 @@ import arc.graphics.Pixmap.*;
 import arc.graphics.g2d.*;
 import arc.graphics.gl.*;
 import arc.math.*;
+import lights.*;
 import mindustry.*;
 
 public class AdditiveBloom{
@@ -15,8 +16,11 @@ public class AdditiveBloom{
     public float blurFeedBack = 1f, flareFeedBack = 1f;
     public float saturation = 12f;
     public float flareDirection = 0f;
+    public int blurDiffuseAmount = 0;
+    public float blurDiffuseSize = 1.75f, blurDiffuseFeedBack = 1f;
+
     private FrameBuffer pingPong1, pingPong2, pingPong3;
-    private Shader blurShader, renderShader, thresholdShader;
+    private Shader blurShader, renderShader, thresholdShader, diffuseShader;
 
     private float lastIntens = 0.75f;
 
@@ -33,6 +37,7 @@ public class AdditiveBloom{
         blurShader = createBlurShader();
         renderShader = createRenderShader();
         thresholdShader = createThresholdShader();
+        diffuseShader = createDiffuseShader();
 
         setSize(width, height);
         setIntensity(0.75f);
@@ -73,9 +78,65 @@ public class AdditiveBloom{
 
             pingPong1.begin();
             blurShader.bind();
-            blurShader.setUniformf("u_feedBack", f);
+            //blurShader.setUniformf("u_feedBack", f);
             blurShader.setUniformf("dir", 0f, blurSize);
             pingPong2.blit(blurShader);
+            pingPong1.end();
+        }
+
+        if(blurDiffuseAmount > 0){
+            pingPong3.begin(Color.black);
+            //diffuseShader.bind();
+            //diffuseShader.setUniformf("u_diffuse", 1f / (blurDiffuseAmount * 2));
+            //diffuseShader.setUniformf("u_diffuse", 1f / (blurDiffuseAmount / (1f + (blurDiffuseSize - 1f) / 10f)));
+            //diffuseShader.setUniformf("u_diffuse", 1f);
+            pingPong1.blit(diffuseShader);
+            pingPong3.end();
+
+            //Blending.additive.apply();
+
+            float scl = blurSize * blurDiffuseSize;
+            for(int i = 0; i < blurDiffuseAmount; i++){
+                float fb = blurDiffuseAmount > 1 ? Mathf.lerp(blurDiffuseFeedBack, 1f, i / (blurDiffuseAmount - 1f)) : 1f;
+                
+                pingPong2.begin();
+                blurShader.bind();
+                //blurShader.setUniformf("u_feedBack", 1f);
+                blurShader.setUniformf("u_feedBack", fb);
+                blurShader.setUniformf("dir", scl, 0f);
+                pingPong3.blit(blurShader);
+                /*
+                if(i == 0){
+                    pingPong3.blit(blurShader);
+                }else{
+                    pingPong1.blit(blurShader);
+                }
+                */
+                pingPong2.end();
+
+                pingPong1.begin();
+                blurShader.bind();
+                //blurShader.setUniformf("u_feedBack", 1);
+                blurShader.setUniformf("dir", 0f, scl);
+                pingPong2.blit(blurShader);
+                pingPong1.end();
+
+                //scl *= blurDiffuseSize;
+                scl += blurSize * blurDiffuseSize;
+
+                Gl.blendEquationSeparate(Gl.max, Gl.max);
+                Blending.additive.apply();
+
+                pingPong3.begin();
+                pingPong1.blit(AdvanceLighting.screenShader);
+                pingPong3.end();
+
+                Gl.blendEquationSeparate(Gl.funcAdd, Gl.funcAdd);
+                Gl.disable(Gl.blend);
+            }
+
+            pingPong1.begin(Color.black);
+            pingPong3.blit(AdvanceLighting.screenShader);
             pingPong1.end();
         }
         
@@ -220,6 +281,31 @@ public class AdditiveBloom{
                     gl_FragColor = vec4(tvc, 1.0);
                 }
                 """);
+    }
+    private static Shader createDiffuseShader(){
+        return new Shader("""
+                    attribute vec4 a_position;
+                    attribute vec2 a_texCoord0;
+                    
+                    varying vec2 v_texCoords;
+                    
+                    void main(){
+                        v_texCoords = a_texCoord0;
+                        gl_Position = a_position;
+                    }
+                    """, """
+                    uniform sampler2D u_texture;
+                    
+                    varying vec2 v_texCoords;
+                    //uniform float u_diffuse;
+                    
+                    void main(){
+                        vec4 c = texture2D(u_texture, v_texCoords);
+                        //c.rgb = c.rgb * u_diffuse;
+                        vec3 tc = mix(vec3(0.0, 0.0, 0.0), c.rgb, c.a);
+                    	gl_FragColor = vec4(tc, 1.0);
+                    }
+                    """);
     }
 
     private static Fi local(String name){
