@@ -10,7 +10,6 @@ import arc.struct.*;
 import arc.util.*;
 import lights.*;
 import lights.graphics.ALShaders.*;
-import mindustry.graphics.*;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -20,10 +19,8 @@ public class AltLightBatch extends SpriteBatch{
 
     LightRequest[] requests = new LightRequest[maxRequests];
     float[] requestZ = new float[maxRequests];
-    Seq<CacheRequest> cacheRequests = new Seq<>(false, 2048, CacheRequest.class);
     FloatSeq uncapture = new FloatSeq();
     int calls = 0;
-    int cacheCalls = 0;
     boolean flushing;
     boolean auto, layerGlow;
     boolean liquidMode = false;
@@ -35,8 +32,8 @@ public class AltLightBatch extends SpriteBatch{
     Color blackAlpha = new Color();
     float blackAlphaBits = Color.blackFloatBits;
 
-    public boolean cacheMode = false;
-    public float cacheLayer = Layer.blockUnder;
+
+    public float manualGlow = -1f;
 
     float excludeMinZ, excludeMaxZ;
 
@@ -52,10 +49,6 @@ public class AltLightBatch extends SpriteBatch{
         for(int i = 0; i < maxRequests; i++){
             //requests.add(new LightRequest());
             requests[i] = new LightRequest();
-        }
-        for(int i = 0; i < 2048; i++){
-            //cacheRequests
-            cacheRequests.add(new CacheRequest());
         }
 
         if(multithreaded){
@@ -185,11 +178,6 @@ public class AltLightBatch extends SpriteBatch{
             return;
         }
 
-        if(cacheMode && color.a >= 0.9f && !glow && z >= excludeMinZ && z <= excludeMaxZ){
-            //boolean autoGlow = AdvanceLighting.autoGlowRegions.contains(region);
-            CacheRequest cr = obtainCache();
-            cr.set(region, x, y, originX, originY, width, height, rotation);
-        }
         if(invalid() || (glowAlpha <= 0f && !glow && !liquidMode)) return;
 
         LightRequest rq = obtain();
@@ -220,6 +208,11 @@ public class AltLightBatch extends SpriteBatch{
             float v = liquidGlow < 0 ? AdvanceLighting.glowingLiquidColorsFunc.get(this.color) : liquidGlow;
             tmpColor.set(blackAlpha).lerp(this.color, v);
             color = tmpColor.toFloatBits();
+        }
+
+        if(manualGlow > -0.9f){
+            color = tmpColor.set(this.color).mul(manualGlow).toFloatBits();
+            rq.manual = true;
         }
 
         rq.texture = region.texture;
@@ -382,9 +375,19 @@ public class AltLightBatch extends SpriteBatch{
             }
         }
          */
-        float color = (glow || AdvanceLighting.uvAutoGlowRegions.contains(ALStructs.uv(texture, vertices[3], vertices[4]))) ? colorPacked : blackAlphaBits;
-        for(int i = 2; i < 24; i += 6){
-            vertices[i] = color;
+
+        if(manualGlow > -0.9f){
+            float c = tmpColor.set(color).mul(manualGlow).toFloatBits();
+            for(int i = 2; i < 24; i += 6){
+                vertices[i] = c;
+            }
+            rq.color = c;
+            rq.manual = true;
+        }else{
+            float color = (glow || AdvanceLighting.uvAutoGlowRegions.contains(ALStructs.uv(texture, vertices[3], vertices[4]))) ? colorPacked : blackAlphaBits;
+            for(int i = 2; i < 24; i += 6){
+                vertices[i] = color;
+            }
         }
 
         if(!glowTexture){
@@ -429,17 +432,6 @@ public class AltLightBatch extends SpriteBatch{
     @Override
     protected void flush(){
         if(!flushing){
-            if(cacheCalls > 0){
-                Draw.draw(cacheLayer, () -> {
-                    for(int i = 0; i < cacheCalls; i++){
-                        CacheRequest cr = cacheRequests.items[i];
-                        //draw(cr.texture, cr.vertices, 0, 24);
-                        superDraw(cr.texture, cr.vertices, 24);
-                    }
-                    cacheCalls = 0;
-                });
-            }
-
             flushing = true;
 
             sortRequestsMain();
@@ -454,8 +446,9 @@ public class AltLightBatch extends SpriteBatch{
                 if(blending != r.blend && r.action == 0) setBlending(r.blend);
 
                 if(r.texture != null){
-                    if(auto) r.convertAutoColor();
-                    if(layerGlow) r.convertGlow();
+                    boolean m = !r.manual;
+                    if(auto && m) r.convertAutoColor();
+                    if(layerGlow && m) r.convertGlow();
                     //if(blending != r.blend) setBlending(r.blend);
                     superDraw(r.texture, r.vertices, 24);
                 }else if(r.run != null){
@@ -546,6 +539,7 @@ public class AltLightBatch extends SpriteBatch{
         r.texture = null;
         r.run = null;
         r.action = 0;
+        r.manual = false;
         requestZ[calls] = r.z = z;
         r.blend = blending;
         calls++;
@@ -562,19 +556,6 @@ public class AltLightBatch extends SpriteBatch{
         }
         this.requests = newRequests;
         requestZ = Arrays.copyOf(requestZ, newRequests.length);
-    }
-
-    CacheRequest obtainCache(){
-        if(cacheCalls >= cacheRequests.size){
-            CacheRequest cr = new CacheRequest();
-            cacheRequests.add(cr);
-            cacheCalls++;
-            return cr;
-        }
-
-        CacheRequest cr = cacheRequests.get(cacheCalls);
-        cacheCalls++;
-        return cr;
     }
 
     static Shader createShaderL(){

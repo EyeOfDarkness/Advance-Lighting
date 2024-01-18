@@ -16,6 +16,7 @@ import lights.parts.*;
 import mindustry.*;
 import mindustry.content.*;
 import mindustry.core.*;
+import mindustry.entities.Effect.*;
 import mindustry.entities.part.*;
 import mindustry.entities.part.DrawPart.*;
 import mindustry.game.*;
@@ -461,13 +462,47 @@ public class AdvanceLighting extends Mod{
         validShaderSet.add(ALShaders.block);
     }
 
-    void load(){
+    void loadOverrides(){
         TextureRegion itemCircle = Core.atlas.find("ring-item");
         TextureRegion phase = Items.phaseFabric.fullIcon;
         if(itemCircle.found()){
             autoGlowRegions.add(itemCircle);
         }
         autoGlowRegions.add(phase);
+
+        Cons<EffectContainer> pudd = Fx.ripple.renderer, shoot = Fx.shootLiquid.renderer, hit = Fx.hitLiquid.renderer;
+
+        Fx.ripple.renderer = e -> {
+            if(Core.batch == batch){
+                batch.manualGlow = glowingLiquidColorsFunc.get(e.color);
+                pudd.get(e);
+                batch.manualGlow = -1f;
+            }else{
+                pudd.get(e);
+            }
+        };
+        Fx.shootLiquid.renderer = e -> {
+            if(Core.batch == batch){
+                batch.manualGlow = glowingLiquidColorsFunc.get(e.color);
+                shoot.get(e);
+                batch.manualGlow = -1f;
+            }else{
+                shoot.get(e);
+            }
+        };
+        Fx.hitLiquid.renderer = e -> {
+            if(Core.batch == batch){
+                batch.manualGlow = glowingLiquidColorsFunc.get(e.color);
+                hit.get(e);
+                batch.manualGlow = -1f;
+            }else{
+                hit.get(e);
+            }
+        };
+    }
+
+    void load(){
+        loadOverrides();
 
         EnviroGlow env = new EnviroGlow();
         TextureRegion[] tmpVariants = new TextureRegion[16];
@@ -765,10 +800,6 @@ public class AdvanceLighting extends Mod{
             if(block != Blocks.air && (visible || build.wasVisible)){
                 Liquid lc;
                 boolean setLiquid = (build != null && liquidBlocks.contains(block.id) && ((lc = build.liquids.current()) != null && build.liquids.currentAmount() > 0.001f && glowingLiquids.contains(lc.id)));
-                //boolean valid = validBlocks.contains(block.id) || onGlowingTile.contains(tile.pos()) || setLiquid;
-                //boolean valid = validBlocks.contains(block.id) || setLiquid;
-
-                //batch.setExcludeLayer(-100f, valid ? -100f : Layer.blockAfterCracks);
 
                 if(setLiquid) batch.setLiquidMode(true);
                 block.drawBase(tile);

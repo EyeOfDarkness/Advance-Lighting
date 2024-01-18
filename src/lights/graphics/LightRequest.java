@@ -5,9 +5,9 @@ import arc.math.*;
 
 public class LightRequest implements Comparable<LightRequest>{
     float z;
-    boolean light;
     float color, mixColor;
     float[] vertices = new float[24];
+    boolean manual = false;
     Blending blend = Blending.normal;
     Texture texture;
     Runnable run;
