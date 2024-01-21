@@ -892,7 +892,13 @@ public class AdvanceLighting extends Mod{
             subBuffer.blit((Vars.renderer.animateShields && Shaders.shield != null) ? Shaders.shield : screenShader);
             subBuffer2.end();
 
+            Gl.blendEquationSeparate(Gl.max, Gl.max);
+            Blending.additive.apply();
+
             subBuffer2.blit(smoothAlphaCutShader);
+
+            Gl.blendEquationSeparate(Gl.funcAdd, Gl.funcAdd);
+            Blending.normal.apply();
         });
         if(Vars.renderer.animateShields && Shaders.shield != null){
             Draw.drawRange(Layer.buildBeam, 1f, () -> subBuffer.begin(Color.clear), () -> {
